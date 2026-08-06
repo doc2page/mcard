@@ -1,5 +1,5 @@
 // src/lib/collector.js
-import { shuffle, parseMtTime } from './shared.js';
+import { shuffle, parseMtTime, deepMerge } from './shared.js';
 
 const HISTORY_LIMIT = 50;
 const MARKET_REFRESH_COOLDOWN = 8 * 1000;
@@ -494,11 +494,89 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     return { ok: true, dropsAdded: r.added };
   }
 
+  // ============ 询价：orderbook 直连（取最高买价 bids[0]，bids 按价格降序）============
+  async function queryOrderbook(filmId, provenance, rarity) {
+    try {
+      const resp = await mtFetch('/api/pt-card/market/orderbook', { filmId: filmId || '', provenance: provenance || '', rarity: rarity || '' });
+      const data = (resp && resp.data) || {};
+      const asks = Array.isArray(data.asks) ? data.asks : [];
+      const bids = Array.isArray(data.bids) ? data.bids : [];
+      return { ok: true, ask: asks.length ? (asks[0].price || null) : null, bid: bids.length ? (bids[0].price || null) : null };
+    } catch (e) {
+      return { ok: false, reason: String(e && e.message || e) };
+    }
+  }
+
+  // ============ 市场搜索：多 tag 串行，cardId 去重合并 ============
+  async function searchMarket(tags, pageSize) {
+    if (!Array.isArray(tags) || !tags.length) return { ok: true, items: [] };
+    const ps = Number(pageSize) || 100;
+    const seen = new Set();
+    const out = [];
+    for (const kw of tags) {
+      const keyword = String(kw || '').trim();
+      if (!keyword) continue;
+      let resp;
+      try {
+        resp = await mtFetch('/api/pt-card/market/search', { pageSize: ps, keyword });
+      } catch (e) {
+        if (e && e.message === 'API_KEY_INVALID') throw e;  // 令牌失效：上抛
+        console.warn('[mcard] market search failed:', keyword, e && e.message); continue;  // 单 tag 失败跳过
+      }
+      if (!resp || resp.code !== '0' || !resp.data) continue;
+      const items = (resp.data && resp.data.data) || [];
+      for (const it of items) {
+        const cid = it.cardId != null ? it.cardId : it.id;
+        const key = cid != null ? String(cid) : (it.filmId + '|' + it.rarity + '|' + it.provenance + '|' + (it.price || ''));
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const mapped = normalizers.mapSearchItem(it);
+        if (mapped) out.push(mapped);
+      }
+    }
+    return { ok: true, items: out };
+  }
+
+  // ============ 首次/手动全量刷新：各 ensure 跑一次 + 一轮市场卡片 ============
+  async function refreshAll() {
+    try {
+      const st = await state.getState();
+      await Promise.all([ensureMyTrades(), ensureMyOrders(), ensureInventoryData()]);
+      await ensureDropStats();
+      await ensureMarketData();
+      try { await fetchMyBonus(); } catch (e) { console.warn('[mcard] bonus fetch failed', e); }
+      await startRound(st, 'refresh', null, (st.config && st.config.listPageSize) || 10);
+    } catch (e) { console.warn('[mcard] refreshAll error', e); }
+    return { ok: true };
+  }
+
+  // ============ 配置：嵌套合并（deepMerge，不丢字段）============
+  async function setConfig(config) {
+    if (!config) return { ok: false };
+    const st = await state.getState();
+    const prev = st.config || {};
+    const merged = deepMerge(prev, config);
+    await state.update({ config: merged });
+    return { ok: true };
+  }
+
+  // ============ 清空采集数据（恢复 DEFAULT_STATE 子集，内联字面量）============
+  async function clearData() {
+    await state.update({
+      buckets: {},
+      mechBucket: { lastReqId: 0, items: [], time: null, count: 0 },
+      history: [],
+      stats: { total: 0, misses: 0, lastRoundTime: null, lastError: null },
+      marketHistory: [],
+    });
+    return { ok: true };
+  }
+
   return {
     startRound, triggerRefreshRound, fetchMarketList, applyMarketRarity, onRoundDone,
     fetchProfile, fetchMyBonus,
     syncList, onProfileData, ensureMyTrades, ensureMyOrders, ensureMarketData,
     ensureCardLogs, ensureInventoryData, fetchMechanismList,
-    ensureDropStats,
+    ensureDropStats, queryOrderbook, searchMarket, refreshAll, setConfig, clearData,
   };
 }
