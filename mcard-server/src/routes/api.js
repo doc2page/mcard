@@ -18,6 +18,7 @@ export function createApiRouter({ state, collector, trader, mteam }) {
     const v = await mteam.verifyApiKey(key);
     if (!v.ok) return res.json(v);
     await state.update({ config: { apiKey: key, apiBase: v.apiBase, webBase: webBase || '' } });
+    if (collector.refreshAll) collector.refreshAll().catch((e) => console.warn('[mcard] refreshAll after config failed', e));  // 首次填 key 触发全量采集
     return res.json({ ok: true });
   });
   router.get('/api/config', (_req, res) => {
