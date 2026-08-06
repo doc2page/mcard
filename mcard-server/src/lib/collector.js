@@ -163,7 +163,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       time: Date.now(),
     };
     await state.update({ profile });
-    console.log('[MTEAM] profile updated', profile.username, 'bonus', profile.bonus);
+    console.log('[mcard] profile updated', profile.username, 'bonus', profile.bonus);
   }
 
   async function fetchProfile() {
@@ -184,9 +184,9 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         const ps = (st.buyHistory && st.buyHistory.length) ? 20 : 200;
         const r = await syncList('/api/pt-card/market/myTrades', mergeTrades, ps, 'incremental');
         out.tradesAdded = r.added;
-        console.log('[MTEAM] myTrades synced', r);
-        try { await fetchProfile(); } catch (e) { console.warn('[MTEAM] profile fetch failed', e); }
-      } catch (e) { console.warn('[MTEAM] myTrades fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+        console.log('[mcard] myTrades synced', r);
+        try { await fetchProfile(); } catch (e) { console.warn('[mcard] profile fetch failed', e); }
+      } catch (e) { console.warn('[mcard] myTrades fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
       finally { _myTradesPromise = null; }
       return out;
     })();
@@ -269,9 +269,9 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       try {
         const r = await syncList('/api/pt-card/market/myorders',
           (items, total) => mergeOrders(items, total).then((rr) => rr.added), 200, 'full');
-        console.log('[MTEAM] orders synced', r);
-        try { await fetchProfile(); } catch (e) { console.warn('[MTEAM] profile fetch failed', e); }
-      } catch (e) { console.warn('[MTEAM] orders fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+        console.log('[mcard] orders synced', r);
+        try { await fetchProfile(); } catch (e) { console.warn('[mcard] profile fetch failed', e); }
+      } catch (e) { console.warn('[mcard] orders fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
       finally { _myOrdersPromise = null; }
       return out;
     })();
@@ -337,8 +337,8 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         const ps = has ? 50 : 200;
         const r = await syncList('/api/pt-card/market/tradeHistory', mergeMarketHistory, ps, 'incremental');
         out.added = r.added;
-        console.log('[MTEAM] marketHistory synced', r);
-      } catch (e) { console.warn('[MTEAM] marketHistory fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+        console.log('[mcard] marketHistory synced', r);
+      } catch (e) { console.warn('[mcard] marketHistory fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
       finally { _marketDataPromise = null; }
       return out;
     })();
@@ -359,8 +359,8 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         const uid = String(st0.profile.id);
         const r = await syncList('/api/credit/logs', mergeCardLogs, 100, 'incremental', { type: 'CARD_MECHANISM', uid: uid });
         out.cardLogsAdded = r.added;
-        console.log('[MTEAM] cardLogs synced', r);
-      } catch (e) { console.warn('[MTEAM] cardLogs fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+        console.log('[mcard] cardLogs synced', r);
+      } catch (e) { console.warn('[mcard] cardLogs fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
       finally { _cardLogsPromise = null; }
       return out;
     })();
@@ -411,16 +411,16 @@ export function createCollector({ state, mteam, normalizers, stats }) {
             if (mechResp && mechResp.code === '0' && Array.isArray(mechResp.data)) {
               mechItems = mechResp.data.map(normalizers.normalizeMechanism).filter(Boolean);
             }
-          } catch (e) { console.warn('[MTEAM] mechanism fetch failed', e); }
+          } catch (e) { console.warn('[mcard] mechanism fetch failed', e); }
           await state.update({ inventory: items, mechInventory: mechItems, inventoryTotal: Number(resp.data.total) || items.length, inventoryFetchedAt: Date.now() });
           out.count = items.length + mechItems.length;
-          console.log('[MTEAM] inventory loaded', items.length, '+ mech', mechItems.length);
+          console.log('[mcard] inventory loaded', items.length, '+ mech', mechItems.length);
         } else {
-          console.warn('[MTEAM] inventory fetch failed or empty');
+          console.warn('[mcard] inventory fetch failed or empty');
           out.ok = false; out.reason = 'fetch_failed';
         }
       } catch (e) {
-        console.warn('[MTEAM] inventory fetch failed', e);
+        console.warn('[mcard] inventory fetch failed', e);
         out.ok = false; out.reason = String(e && e.message || e);
       } finally {
         _inventoryPromise = null;
@@ -450,7 +450,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       finalBs: finalBs,
       raw: { bonus: resp.data.bonus || {}, formulaParams: fp },
     } });
-    console.log('[MTEAM] bonus saved, finalBs=', finalBs);
+    console.log('[mcard] bonus saved, finalBs=', finalBs);
   }
 
   function _todayStr() {
@@ -458,10 +458,47 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // ============ 掉落统计（仅 feed 增量；原 tab 全量路径已删除——容器无浏览器）============
+  // feed 增量：/pt-card/feed 结构化卡片 → feedCards（cardId 去重，游标 createdDate > lastMsgDate 只补 msg 之后）
+  async function mergeDropFeed(items, total) {
+    if (!Array.isArray(items) || !items.length) return 0;
+    const st = await state.getState();
+    const ds = Object.assign({}, st.dropStats || {});
+    ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards.slice() : [];
+    ds.since = ds.since || '';
+    const existIds = new Set(ds.feedCards.map((c) => String(c.cardId)));
+    const cursor = ds.lastMsgDate || '';   // feed 只补 msg 最新之后，不重叠
+    let added = 0;
+    for (const it of items) {
+      if (!it || it.id == null) continue;
+      const id = String(it.id);
+      if (existIds.has(id)) continue;
+      const created = it.createdDate || '';
+      if (cursor && created && created <= cursor) continue;     // 只补 msg 之后
+      ds.feedCards.push({ cardId: id, createdDate: created, rarity: it.rarity || '', title: it.title || '' });
+      existIds.add(id);
+      added++;
+    }
+    if (added) ds.feedCards.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
+    ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
+    await state.update({ dropStats: ds });
+    console.log('[mcard] drop merged (feed), +' + added + ', total feedCards', ds.feedCards.length);
+    return added;
+  }
+
+  // feed 增量直连（最新 25 条），不走 tab。
+  async function ensureDropStats() {
+    const r = await syncList('/api/pt-card/feed', mergeDropFeed, 25, 'incremental');
+    const cur = await state.getState();
+    await state.update({ dropStats: Object.assign({}, cur.dropStats || {}, { lastFeedAt: Date.now() }) });
+    return { ok: true, dropsAdded: r.added };
+  }
+
   return {
     startRound, triggerRefreshRound, fetchMarketList, applyMarketRarity, onRoundDone,
     fetchProfile, fetchMyBonus,
     syncList, onProfileData, ensureMyTrades, ensureMyOrders, ensureMarketData,
     ensureCardLogs, ensureInventoryData, fetchMechanismList,
+    ensureDropStats,
   };
 }
