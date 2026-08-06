@@ -2,14 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <link rel="icon" href="logo.png" type="image/png" />
   <title>MCard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="app.css" />
-  <script type="module" src="dispatch.js"></script>
+  <link rel="stylesheet" href="dashboard.css" />
   <script src="theme-bootstrap.js"></script>
   <script src="lang-bootstrap.js"></script>
 </head>
@@ -17,7 +14,6 @@
   <div class="bg-fx" aria-hidden="true"></div>
 
   <header class="topbar">
-    <button class="menu-toggle" id="menuToggle" type="button" aria-label="菜单">☰</button>
     <div class="brand">
       <img class="logo" src="logo.png" alt="MCard" />
       <div class="brand-text">
@@ -37,7 +33,7 @@
   </header>
 
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar">
       <section class="panel" id="myPanel">
         <div class="panel-title" data-i18n="panel.profile"></div>
         <div class="profile-card" id="profileCard"></div>
@@ -264,27 +260,11 @@
     </div>
   </div>
 
-  <div class="drawer-mask" id="drawerMask"></div>
-  <nav class="mobile-tabs" id="mobileTabs" aria-label="主导航">
-    <button type="button" class="mtab" data-view="market"><span class="mtab-icon">🏪</span><span class="mtab-label">市场</span></button>
-    <button type="button" class="mtab" data-view="trades"><span class="mtab-icon">💳</span><span class="mtab-label">交易</span></button>
-    <button type="button" class="mtab" data-view="orders"><span class="mtab-icon">📋</span><span class="mtab-label">挂单</span></button>
-    <button type="button" class="mtab" data-view="inventory"><span class="mtab-icon">📦</span><span class="mtab-label">持有</span></button>
-    <button type="button" class="mtab" data-view="dropStats"><span class="mtab-icon">🎁</span><span class="mtab-label">掉落</span></button>
-    <button type="button" class="mtab" data-view="marketData"><span class="mtab-icon">📈</span><span class="mtab-label">数据</span></button>
-  </nav>
-
-  <script>
-    // 已弃用 PWA：注销历史遗留的 service worker（一次性清理；确认各端都清掉后此段可删）
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); });
-    }
-  </script>
   <script src="shared.js"></script>
   <script src="portrait.js"></script>
   <script src="marketStats.js"></script>
   <script src="locales/zh.js"></script>
   <script src="locales/en.js"></script>
-  <script defer src="app.js"></script>
+  <script src="dashboard.js"></script>
 </body>
 </html>

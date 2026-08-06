@@ -1,0 +1,5 @@
+{
+  "name": { "message": "MCard - M-Team卡牌市场助手" },
+  "description": { "message": "M-Team 卡牌市场助手：直连 API 采集卡牌行情，支持手动购买 / 卖出 / 撤单与预算管理，集成交易记录、持有、挂单、用户画像、掉落统计与市场数据看板。" },
+  "actionTitle": { "message": "MCard - M-Team卡牌市场助手" }
+}

@@ -1,0 +1,33 @@
+- generic [ref=e1]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - img "MCard" [ref=e5]
+      - generic [ref=e6]:
+        - generic [ref=e7]: MCard
+        - generic [ref=e8]: M-Team Card Market Helper
+    - generic [ref=e9]:
+      - 'button "Theme: Light (click to toggle)" [ref=e10] [cursor=pointer]'
+      - button "Switch language" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: 中
+  - generic [ref=e16]:
+    - complementary [ref=e17]:
+      - generic [ref=e18]: Direct API · Local storage
+    - text: ·
+  - generic [ref=e20]:
+    - generic [ref=e21]: Set M-Team API Token
+    - generic [ref=e22]:
+      - text: "The extension fetches data directly from api.m-team.cc and needs an x-api-key. Get one at the m-team lab:"
+      - link "https://kp.m-team.cc/usercp?tab=laboratory" [ref=e23] [cursor=pointer]:
+        - /url: https://kp.m-team.cc/usercp?tab=laboratory
+      - text: . Generate an API key and paste it below. Stored locally only, never uploaded.
+    - generic [ref=e24]:
+      - generic [ref=e25]: Pick the m-team site you normally use
+      - combobox [ref=e26]:
+        - option "https://kp.m-team.cc/" [selected]
+        - option "https://zp.m-team.io/"
+    - generic [ref=e27] [cursor=pointer]:
+      - checkbox "※ The extension opens background tabs during use (e.g. purchases, drop stats). Using it means you acknowledge and consent to this." [checked] [ref=e28]
+      - generic [ref=e29]: ※ The extension opens background tabs during use (e.g. purchases, drop stats). Using it means you acknowledge and consent to this.
+    - textbox "Paste x-api-key token" [active] [ref=e30]: test-fake-key-12345
+    - generic [ref=e31]: Invalid token, please check and re-enter
+    - button "Save & refresh" [ref=e33] [cursor=pointer]

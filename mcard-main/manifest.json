@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "default_locale": "zh_CN",
+  "name": "__MSG_name__",
+  "version": "0.5.5",
+  "description": "__MSG_description__",
+  "minimum_chrome_version": "111",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": ["https://kp.m-team.cc/*", "https://api.m-team.cc/*", "https://zp.m-team.io/*", "https://api.m-team.io/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "logo.png"
+  },
+  "action": {
+    "default_title": "__MSG_actionTitle__",
+    "default_icon": "logo.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://kp.m-team.cc/message/-2*", "https://zp.m-team.io/message/-2*"],
+      "js": ["inject.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://kp.m-team.cc/message/-2*", "https://zp.m-team.io/message/-2*"],
+      "js": ["shared.js", "content.js"],
+      "world": "ISOLATED",
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

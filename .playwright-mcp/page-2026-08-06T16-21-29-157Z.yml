@@ -1,0 +1,25 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e3]:
+    - button "菜单" [ref=e4] [cursor=pointer]: ☰
+    - generic [ref=e5]:
+      - img "MCard" [ref=e6]
+      - generic [ref=e7]: MCard
+    - generic [ref=e9]:
+      - button [ref=e10] [cursor=pointer]
+      - button "中" [ref=e14] [cursor=pointer]
+  - generic [ref=e16]:
+    - complementary [ref=e17]:
+      - generic [ref=e20]:
+        - button "0" [ref=e21] [cursor=pointer]
+        - button "0" [ref=e23] [cursor=pointer]
+        - button "0" [ref=e25] [cursor=pointer]
+        - button "0" [ref=e27] [cursor=pointer]
+        - button "0" [ref=e29] [cursor=pointer]
+      - generic [ref=e32] [cursor=pointer]
+      - generic [ref=e35]:
+        - button [ref=e36] [cursor=pointer]
+        - button [ref=e37] [cursor=pointer]
+      - generic [ref=e39] [cursor=pointer]:
+        - generic [ref=e40]: API 令牌
+        - generic [ref=e41]: 未设置
+    - main [ref=e44]: ·

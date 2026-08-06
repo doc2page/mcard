@@ -1,0 +1,11 @@
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.log
+tmp/
+docs/
+CLAUDE.md
+tests/
+.superpowers/
