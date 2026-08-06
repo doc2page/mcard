@@ -460,7 +460,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
 
   // ============ 掉落统计（仅 feed 增量；原 tab 全量路径已删除——容器无浏览器）============
   // feed 增量：/pt-card/feed 结构化卡片 → feedCards（cardId 去重，游标 createdDate > lastMsgDate 只补 msg 之后）
-  async function mergeDropFeed(items, total) {
+  async function mergeDropFeed(items) {
     if (!Array.isArray(items) || !items.length) return 0;
     const st = await state.getState();
     const ds = Object.assign({}, st.dropStats || {});
