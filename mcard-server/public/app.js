@@ -75,6 +75,9 @@ function send(msg) {
   }).then((r) => r.json()).catch((e) => { console.warn('[mcard] send failed', msg.type, e); return null; });
 }
 
+// 是否已配置令牌（后端把 key 存在 state.config.apiKey，/api/state 脱敏成 '(set)'/''）
+function hasApiKey(st) { return !!(st && st.config && st.config.apiKey); }
+
 // ---------- DOM helpers（不使用 innerHTML） ----------
 function el(tag, opts) {
   opts = opts || {};
@@ -350,7 +353,7 @@ function toggleView(v) {
   if (grid) grid._sig = null;
   renderLive();
   // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound
-  if (v === 'market' && state && state.mtApiKey) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
+  if (v === 'market' && state && hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
   // 移动端底部 tab 栏：同步 active 态到当前 view
   document.querySelectorAll('.mobile-tabs .mtab').forEach(function (b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
@@ -3983,7 +3986,7 @@ async function removeSearchTag(tag) {
 async function runSearch() {
   const tags = ((state.config && state.config.searchTags) || []);
   if (!tags.length) { searchResults = null; searching = false; renderCards(); return; }
-  if (!state.mtApiKey) return;
+  if (!hasApiKey(state)) return;
   const seq = ++_searchSeq;
   searching = true;
   renderCards();  // 立即显示 loading
@@ -4364,7 +4367,7 @@ async function onPageSizePick(value) {
   await send({ type: 'SET_CONFIG', config: cfg });
   state = await send({ type: 'GET_STATE' });
   renderLive();
-  if (state.mtApiKey) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }   // 改 pageSize 后立即刷新市场（有 tag → 重 search）
+  if (hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }   // 改 pageSize 后立即刷新市场（有 tag → 重 search）
 }
 
 async function onModePick(value) {
@@ -4783,8 +4786,8 @@ function renderTokenPanel() {
   var editIcon = $('tokenEditIcon');
   var editActions = $('tokenEditActions');
   if (!field || !field.readOnly) return;   // 不存在或编辑中：不覆盖
-  var key = state.mtApiKey || '';
-  field.value = key ? maskToken(key) : '';
+  var key = hasApiKey(state) || '';
+  field.value = key ? '••••••••' : '';
   field.placeholder = key ? '' : t('token.placeholderEmpty');
   field.classList.remove('editing');
   if (badge) { badge.textContent = key ? t('token.set') : t('token.unset'); badge.className = 'token-badge' + (key ? ' on' : ''); }
@@ -4902,7 +4905,7 @@ function initTokenModal() {
   var verifying = false;
   function syncSaveDisabled() { if (!verifying) save.disabled = consent ? !consent.checked : false; }
   if (!modal || !input || !save) return;
-  if (!state.mtApiKey) openTokenModal();
+  if (!hasApiKey(state)) openTokenModal();
   if (consent) consent.addEventListener('change', syncSaveDisabled);
   var _siteSel = $('tokenModalSite');
   if (_siteSel) _siteSel.addEventListener('change', function () {   // 切站即时更新实验室链接（待选值）
@@ -4969,10 +4972,10 @@ function applyLabUrl() {
   initBudget();
   initBatch();
   initTokenPanel();
-  if (!state.mtApiKey) document.body.classList.add('no-token');
+  if (!hasApiKey(state)) document.body.classList.add('no-token');
   initTokenModal();
   // 加载时刷新市场：有定向 tag → runSearch；否则 → triggerRefreshRound（用 cfg.listPageSize）
-  if (state.mtApiKey) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
+  if (hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
 })();
 
 // 交易记录搜索框事件绑定（仅初始化一次）
