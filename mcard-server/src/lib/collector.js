@@ -1,13 +1,30 @@
 // src/lib/collector.js
-import { shuffle } from './shared.js';
+import { shuffle, parseMtTime } from './shared.js';
 
 const HISTORY_LIMIT = 50;
 const MARKET_REFRESH_COOLDOWN = 8 * 1000;
+const LIST_MAX_PAGES = 100;
 let lastMarketRefreshAt = 0;
 
 export function createCollector({ state, mteam, normalizers, stats }) {
   const { slim } = normalizers;
   const { mtFetch } = mteam;
+
+  // 采集冷却/去重状态（每个 collector 实例独立，便于测试 + 多实例）
+  const MYORDERS_FETCH_COOLDOWN = 8000;
+  const MARKETDATA_FETCH_COOLDOWN = 8000;
+  const CARDLOG_FETCH_COOLDOWN = 30000;
+  const INVENTORY_FETCH_COOLDOWN = 30000;
+  let _myOrdersPromise = null;
+  let lastMyOrdersFetchAt = 0;
+  let _myTradesPromise = null;
+  let lastMyTradesFetchAt = 0;
+  let _marketDataPromise = null;
+  let lastMarketDataFetchAt = 0;
+  let _cardLogsPromise = null;
+  let lastCardLogFetchAt = 0;
+  let _inventoryPromise = null;
+  let lastInventoryFetchAt = 0;
 
   async function fetchMarketList(rarity, pageSize) {
     const body = rarity === 'MECH'
@@ -37,6 +54,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   }
 
   async function onRoundDone({ hits, misses, authFailed }) {
+    console.log('[mcard] round done', { hits, misses, authFailed });
     const st = await state.getState();
     if (!st.round || st.round.done) return;
     const stats_ = Object.assign({}, st.stats, {
@@ -106,9 +124,344 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     return { ok: true, queued: false };
   }
 
-  // fetchProfile / fetchMyBonus filled in by a later task; placeholders so market tests run.
-  async function fetchProfile() {}
-  async function fetchMyBonus() {}
+  // ============ 通用翻页（mytrades/myorders/marketHistory/cardLogs 共用）============
+  //   stopMode 'incremental'：本页 0 新增即停（与本地衔接，适合历史增量，日常 1 页）；
+  //   stopMode 'full'：只看拿全（total/空页），适合每次全量刷新的当前态数据。
+  // mergeFn(items, total) 返回本页新增数（>0 表示有新数据）。
+  async function syncList(path, mergeFn, pageSize, stopMode, extraBody) {
+    let page = 0, totalAdded = 0;
+    while (page < LIST_MAX_PAGES) {
+      page++;
+      const resp = await mtFetch(path, Object.assign({ pageNumber: page, pageSize: pageSize }, extraBody || {}));
+      if (!resp || resp.code !== '0' || !resp.data || !Array.isArray(resp.data.data)) break;
+      const items = resp.data.data;
+      const total = Number(resp.data.total) || 0;
+      const added = await mergeFn(items, total) || 0;
+      totalAdded += added;
+      if (!items.length) break;                              // 空页 = 拿全
+      if (stopMode === 'incremental' && !added) break;       // 衔接：本页全已在本地
+      if (total && page * pageSize >= total) break;          // 按 total 拿全
+    }
+    return { pages: page, added: totalAdded };
+  }
 
-  return { startRound, triggerRefreshRound, fetchMarketList, applyMarketRarity, onRoundDone, fetchProfile, fetchMyBonus };
+  // 个人资料数据到达 → 提取所需字段存储
+  async function onProfileData(resp) {
+    if (!resp || resp.code !== '0' || !resp.data) return;
+    const d = resp.data;
+    const mc = d.memberCount || {};
+    const profile = {
+      username: d.username || '',
+      id: d.id || '',
+      avatarUrl: d.avatarUrl || d.avatar || '',  // 头像（API 字段名兜底）
+      createdDate: d.createdDate || '',
+      role: d.role || '',
+      bonus: mc.bonus || '0',
+      uploaded: mc.uploaded || '0',
+      downloaded: mc.downloaded || '0',
+      shareRate: mc.shareRate || '0',
+      time: Date.now(),
+    };
+    await state.update({ profile });
+    console.log('[MTEAM] profile updated', profile.username, 'bonus', profile.bonus);
+  }
+
+  async function fetchProfile() {
+    const resp = await mtFetch('/api/member/profile', {});
+    await onProfileData(resp);
+  }
+
+  // ============ mytrades 翻页衔接（日常 1 页增量，首次 pageSize=200 翻全建库）============
+  // mytrades 翻页衔接（日常 1 页增量，首次 pageSize=200 翻全建库）+ profile。
+  async function ensureMyTrades(force) {
+    if (_myTradesPromise) return _myTradesPromise;
+    if (!force && Date.now() - lastMyTradesFetchAt < MYORDERS_FETCH_COOLDOWN) return { ok: true, skipped: true };
+    lastMyTradesFetchAt = Date.now();
+    _myTradesPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const st = await state.getState();
+        const ps = (st.buyHistory && st.buyHistory.length) ? 20 : 200;
+        const r = await syncList('/api/pt-card/market/myTrades', mergeTrades, ps, 'incremental');
+        out.tradesAdded = r.added;
+        console.log('[MTEAM] myTrades synced', r);
+        try { await fetchProfile(); } catch (e) { console.warn('[MTEAM] profile fetch failed', e); }
+      } catch (e) { console.warn('[MTEAM] myTrades fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      finally { _myTradesPromise = null; }
+      return out;
+    })();
+    return _myTradesPromise;
+  }
+
+  // 按 id 增量合并进 buyHistory；side 由 sellerId/buyerId == 我的 id 判定；按 tradedAt 降序
+  async function mergeTrades(items) {
+    if (!Array.isArray(items) || !items.length) return 0;
+    const st = await state.getState();
+    const myId = (st.profile && st.profile.id != null) ? String(st.profile.id) : null;
+    const exist = (st.buyHistory || []).slice();
+    const existIds = new Set(exist.map((t) => String(t.id)));
+    let added = 0;
+    for (const it of items) {
+      if (it.id == null || existIds.has(String(it.id))) continue;
+      const side = (myId != null && String(it.sellerId) === myId) ? 'sell' : 'buy';
+      exist.push({
+        id: String(it.id),
+        side,
+        filmId: it.filmId || '',
+        filmName: it.filmName || '',
+        poster: it.poster || '',
+        rarity: it.rarity || '',
+        provenance: it.provenance || '',
+        title: it.title || '',
+        price: it.price != null ? String(it.price) : '',
+        buyerId: it.buyerId != null ? String(it.buyerId) : '',
+        sellerId: it.sellerId != null ? String(it.sellerId) : '',
+        tradedAt: it.tradedAt || '',
+        localTime: Date.now(),
+      });
+      existIds.add(String(it.id));
+      added++;
+    }
+    if (!added) return 0;
+    exist.sort((a, b) => (parseMtTime(b.tradedAt) || 0) - (parseMtTime(a.tradedAt) || 0));
+    await state.update({ buyHistory: exist });
+    return added;
+  }
+
+  // ============ 挂单记录：增量合并进 ordersAll（按记录id去重，status变化更新）============
+  // 增量合并挂单记录进 ordersAll：按记录 id 去重；新 id 追加，已有 id 更新可变字段(status/price/lastModifiedDate)。
+  // cardId 是卡片身份(同 cardId 多条记录 = 该卡挂单轨迹)，记录 id 是单次挂单号。
+  async function mergeOrders(items, total) {
+    const st = await state.getState();
+    const exist = new Map((st.ordersAll || []).map((o) => [String(o.id), o]));
+    if (!Array.isArray(items) || !items.length) return { added: 0, updated: 0, total: exist.size };
+    let added = 0, updated = 0;
+    for (const it of items) {
+      if (!it || it.id == null) continue;
+      const id = String(it.id);
+      const norm = {
+        id: id, cardId: String(it.cardId || ''), side: it.side || 'sell',
+        filmId: it.filmId || '', filmName: it.filmName || '', poster: it.poster || '',
+        rarity: it.rarity || '', provenance: it.provenance || '', title: it.title || '',
+        price: it.price != null ? String(it.price) : '', qty: it.qty != null ? String(it.qty) : '1',
+        status: it.status || 'open',
+        createdDate: it.createdDate || '', lastModifiedDate: it.lastModifiedDate || '',
+      };
+      const cur = exist.get(id);
+      if (!cur) { exist.set(id, norm); added++; }
+      else if (cur.status !== norm.status || cur.price !== norm.price || cur.lastModifiedDate !== norm.lastModifiedDate) {
+        exist.set(id, Object.assign({}, cur, { status: norm.status, price: norm.price, lastModifiedDate: norm.lastModifiedDate }));
+        updated++;
+      }
+    }
+    if (!added && !updated) return { added: 0, updated: 0, total: exist.size };
+    await state.update({ ordersAll: Array.from(exist.values()), ordersTotal: total || exist.size });
+    return { added, updated, total: exist.size };
+  }
+
+  // myorders 每次翻页拿全（pageSize=200）+ profile。
+  async function ensureMyOrders(force) {
+    if (_myOrdersPromise) return _myOrdersPromise;
+    if (!force && Date.now() - lastMyOrdersFetchAt < MYORDERS_FETCH_COOLDOWN) return { ok: true, skipped: true };
+    lastMyOrdersFetchAt = Date.now();
+    _myOrdersPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const r = await syncList('/api/pt-card/market/myorders',
+          (items, total) => mergeOrders(items, total).then((rr) => rr.added), 200, 'full');
+        console.log('[MTEAM] orders synced', r);
+        try { await fetchProfile(); } catch (e) { console.warn('[MTEAM] profile fetch failed', e); }
+      } catch (e) { console.warn('[MTEAM] orders fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      finally { _myOrdersPromise = null; }
+      return out;
+    })();
+    return _myOrdersPromise;
+  }
+
+  // ============ 市场成交历史：tradeHistory 直连翻页（首次全量 200 / 增量 50）============
+  // 按 id 去重合并进 marketHistory（保留分析所需全字段）；按 tradedAt 降序。返回本页新增数。
+  async function mergeMarketHistory(items) {
+    if (!Array.isArray(items) || !items.length) return 0;
+    const st = await state.getState();
+    const exist = Array.isArray(st.marketHistory) ? st.marketHistory.slice() : [];
+    const existIds = {};
+    for (let i = 0; i < exist.length; i++) existIds[String(exist[i].id)] = 1;
+    let added = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.id == null) continue;
+      const id = String(it.id);
+      if (existIds[id]) continue;
+      exist.push({
+        id: id,
+        buyerId: it.buyerId != null ? String(it.buyerId) : '',
+        sellerId: it.sellerId != null ? String(it.sellerId) : '',
+        filmId: it.filmId || '',
+        filmName: it.filmName || '',
+        rarity: it.rarity || '',
+        provenance: it.provenance || '',
+        title: it.title || '',
+        price: it.price != null ? String(it.price) : '',
+        fee: it.fee != null ? String(it.fee) : '',
+        cardId: it.cardId != null ? String(it.cardId) : '',
+        buyOrderId: (it.buyOrderId === null || it.buyOrderId === undefined) ? null : String(it.buyOrderId),
+        sellOrderId: (it.sellOrderId === null || it.sellOrderId === undefined) ? null : String(it.sellOrderId),
+        tradedAt: it.tradedAt || '',
+        poster: it.poster || '',
+        year: it.year || '',
+      });
+      existIds[id] = 1;
+      added++;
+    }
+    if (!added) return 0;
+    exist.sort(function (a, b) { return (parseMtTime(b.tradedAt) || 0) - (parseMtTime(a.tradedAt) || 0); });
+    await state.update({ marketHistory: exist });
+    return added;
+  }
+
+  // 首次（marketHistory 空）→ pageSize=200 翻页至 total；之后 → pageSize=50 增量（日常 1 页）。
+  async function ensureMarketData(force) {
+    if (_marketDataPromise) return _marketDataPromise;
+    if (!force && Date.now() - lastMarketDataFetchAt < MARKETDATA_FETCH_COOLDOWN) return { ok: true, skipped: true };
+    lastMarketDataFetchAt = Date.now();
+    _marketDataPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const st = await state.getState();
+        let has = Array.isArray(st.marketHistory) && st.marketHistory.length;
+        // v0.3.2 迁移：旧数据缺 buyOrderId/sellOrderId（方向判定字段）→ 清空触发全量重采
+        if (has && st.marketHistory.some(function (r) { return !('buyOrderId' in r); })) {
+          await state.update({ marketHistory: [] });
+          has = false;
+        }
+        const ps = has ? 50 : 200;
+        const r = await syncList('/api/pt-card/market/tradeHistory', mergeMarketHistory, ps, 'incremental');
+        out.added = r.added;
+        console.log('[MTEAM] marketHistory synced', r);
+      } catch (e) { console.warn('[MTEAM] marketHistory fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      finally { _marketDataPromise = null; }
+      return out;
+    })();
+    return _marketDataPromise;
+  }
+
+  // ============ 魔力符券使用记录：credit/logs 直连翻页（增量合并）============
+  // 魔力符券开卡记录（/api/credit/logs type=CARD_MECHANISM）。需 profile.id 作 uid。
+  async function ensureCardLogs(force) {
+    if (_cardLogsPromise) return _cardLogsPromise;
+    if (!force && Date.now() - lastCardLogFetchAt < CARDLOG_FETCH_COOLDOWN) return { ok: true, skipped: true };
+    const st0 = await state.getState();
+    if (!(st0.profile && st0.profile.id != null)) return { ok: false, reason: 'no_profile' };  // 需 uid
+    lastCardLogFetchAt = Date.now();
+    _cardLogsPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const uid = String(st0.profile.id);
+        const r = await syncList('/api/credit/logs', mergeCardLogs, 100, 'incremental', { type: 'CARD_MECHANISM', uid: uid });
+        out.cardLogsAdded = r.added;
+        console.log('[MTEAM] cardLogs synced', r);
+      } catch (e) { console.warn('[MTEAM] cardLogs fetch failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      finally { _cardLogsPromise = null; }
+      return out;
+    })();
+    return _cardLogsPromise;
+  }
+
+  // 按 id 增量合并进 cardLogs；存 createdDate/bonus/paid，按 createdDate 降序
+  async function mergeCardLogs(items) {
+    if (!Array.isArray(items) || !items.length) return 0;
+    const st = await state.getState();
+    const exist = (st.cardLogs || []).slice();
+    const existIds = new Set(exist.map((c) => String(c.id)));
+    let added = 0;
+    for (const it of items) {
+      if (it.id == null || existIds.has(String(it.id))) continue;
+      exist.push({
+        id: String(it.id),
+        createdDate: it.createdDate || '',
+        lastModifiedDate: it.lastModifiedDate || '',
+        bonus: it.bonus != null ? String(it.bonus) : '',
+        paid: !!it.paid,
+      });
+      existIds.add(String(it.id));
+      added++;
+    }
+    if (!added) return 0;
+    exist.sort((a, b) => (b.createdDate || '').localeCompare(a.createdDate || ''));
+    await state.update({ cardLogs: exist, cardLogSummary: stats.computeCardLogSummary(exist) });
+    return added;
+  }
+
+  // ============ 持有：inventory 直连（全量覆盖）+ 机制卡（mechanism/list 独立接口）============
+  // inventory 直连：POST /api/pt-card/inventory，pageSize=200 一次拿全部持有（全量覆盖）。
+  async function ensureInventoryData(force) {
+    if (_inventoryPromise) return _inventoryPromise;
+    if (!force && Date.now() - lastInventoryFetchAt < INVENTORY_FETCH_COOLDOWN) return { ok: true, skipped: true };
+    lastInventoryFetchAt = Date.now();
+    _inventoryPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const resp = await mtFetch('/api/pt-card/inventory', { pageNumber: 1, pageSize: 200 });
+        if (resp && resp.code === '0' && resp.data && Array.isArray(resp.data.data)) {
+          const items = resp.data.data.map(normalizers.normalizeInventory).filter(Boolean);
+          // 机制卡持有（mechanism/list，独立接口；失败不影响普通卡）
+          let mechItems = [];
+          try {
+            const mechResp = await fetchMechanismList();
+            if (mechResp && mechResp.code === '0' && Array.isArray(mechResp.data)) {
+              mechItems = mechResp.data.map(normalizers.normalizeMechanism).filter(Boolean);
+            }
+          } catch (e) { console.warn('[MTEAM] mechanism fetch failed', e); }
+          await state.update({ inventory: items, mechInventory: mechItems, inventoryTotal: Number(resp.data.total) || items.length, inventoryFetchedAt: Date.now() });
+          out.count = items.length + mechItems.length;
+          console.log('[MTEAM] inventory loaded', items.length, '+ mech', mechItems.length);
+        } else {
+          console.warn('[MTEAM] inventory fetch failed or empty');
+          out.ok = false; out.reason = 'fetch_failed';
+        }
+      } catch (e) {
+        console.warn('[MTEAM] inventory fetch failed', e);
+        out.ok = false; out.reason = String(e && e.message || e);
+      } finally {
+        _inventoryPromise = null;
+      }
+      return out;
+    })();
+    return _inventoryPromise;
+  }
+
+  // 机制卡持有（mechanism/list，body 空，data 直接数组；usedAt!=null 已使用销毁）
+  async function fetchMechanismList() {
+    return mtFetch('/api/pt-card/mechanism/list', {});
+  }
+
+  // ============ mybonus 直连（裸采集，无冷却 gate，由调用方按需触发）============
+  async function fetchMyBonus() {
+    const resp = await mtFetch('/api/tracker/mybonus', {});
+    await onBonusData(resp);
+  }
+
+  async function onBonusData(resp) {
+    if (!resp || resp.code !== '0' || !resp.data) return;
+    const fp = resp.data.formulaParams || {};
+    const finalBs = Number(fp.finalBs) || 0;
+    await state.update({ bonus: {
+      lastFetchDate: _todayStr(),
+      finalBs: finalBs,
+      raw: { bonus: resp.data.bonus || {}, formulaParams: fp },
+    } });
+    console.log('[MTEAM] bonus saved, finalBs=', finalBs);
+  }
+
+  function _todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  return {
+    startRound, triggerRefreshRound, fetchMarketList, applyMarketRarity, onRoundDone,
+    fetchProfile, fetchMyBonus,
+    syncList, onProfileData, ensureMyTrades, ensureMyOrders, ensureMarketData,
+    ensureCardLogs, ensureInventoryData, fetchMechanismList,
+  };
 }
