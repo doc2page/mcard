@@ -66,7 +66,13 @@ let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities:
 let inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/锁定多选）
 
 function send(msg) {
-  return new Promise((resolve) => chrome.runtime.sendMessage(msg, (r) => resolve(r)));
+  const d = window.dispatch(msg);
+  if (!d) return Promise.resolve(null);
+  return fetch(d.path, {
+    method: d.method,
+    headers: d.body !== undefined ? { 'content-type': 'application/json' } : {},
+    body: d.body !== undefined ? JSON.stringify(d.body) : undefined,
+  }).then((r) => r.json()).catch((e) => { console.warn('[mcard] send failed', msg.type, e); return null; });
 }
 
 // ---------- DOM helpers（不使用 innerHTML） ----------
