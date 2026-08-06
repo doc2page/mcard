@@ -40,10 +40,7 @@ test('profile 解析 bonus/role', async () => {
 });
 
 test('mergeOrders 返回 {added,updated,total} 并更新状态字段', async () => {
-  const d = deps({ mtFetch: async () => ({ code: '0', data: { data: [], total: 0 } }), verifyApiKey: async () => ({ ok: true }) });
-  const col = createCollector(d);
-  // 直接调内部 merge 不可行（未导出）；改用 ensureMyOrders 走 syncList 验证 ordersAll 落库
-  // 这里用 myorders mock 数据验证合并 + status 更新
+  // mergeOrders 未导出；用 ensureMyOrders 走 syncList 验证 ordersAll 落库 + status
   const d2 = deps({ mtFetch: async (path) => {
     if (path === '/api/pt-card/market/myorders')
       return { code: '0', data: { data: [
