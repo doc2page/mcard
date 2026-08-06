@@ -1,5 +1,6 @@
 // src/server.js
 import express from 'express';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
 import { createState } from './state.js';
@@ -59,6 +60,7 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
   const app = express();
   app.use(express.json());
   app.get('/health', (_req, res) => res.json({ ok: true }));
+  app.use(express.static(path.join(import.meta.dirname, '../public')));
   app.use(createApiRouter({ state, collector, trader, mteam }));
   app.use(createSseRouter({ state }));
 
