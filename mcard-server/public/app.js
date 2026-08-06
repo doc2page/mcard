@@ -351,6 +351,10 @@ function toggleView(v) {
   renderLive();
   // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound
   if (v === 'market' && state && state.mtApiKey) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
+  // 移动端底部 tab 栏：同步 active 态到当前 view
+  document.querySelectorAll('.mobile-tabs .mtab').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
 }
 
 // 聚合各数据源算画像（资料卡称号/氛围色 + 画像页复用）
@@ -4949,6 +4953,15 @@ function applyLabUrl() {
   if (_langBtn) _langBtn.addEventListener('click', function () { setLang(getI18nLang() === 'en' ? 'zh' : 'en'); });
   initTheme();
   renderAll();
+  // 移动端底部 tab 栏：点击切换 view + 触发对应数据加载
+  document.querySelectorAll('.mobile-tabs .mtab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-view');
+      toggleView(v);
+      var loadType = { trades: 'LOAD_TRADES', orders: 'LOAD_ORDERS', inventory: 'LOAD_INVENTORY', dropStats: 'LOAD_DROP_STATS', marketData: 'LOAD_MARKET_DATA' }[v];
+      if (loadType) send({ type: loadType });
+    });
+  });
   initBackTop();
   initTradesSearch();
   initOrdersSearch();

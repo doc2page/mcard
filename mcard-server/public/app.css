@@ -1835,3 +1835,25 @@ body.no-token .layout > main { display: none !important; }
 .batch-row-remove:hover { color: var(--down); background: var(--surface-2); }
 .batch-row-remove:disabled { opacity: 0.3; cursor: default; }
 .batch-pricebar { display: flex; gap: 6px; align-items: center; padding: 8px; margin-bottom: 6px; background: var(--surface-2); border-radius: 8px; flex-wrap: wrap; }
+
+/* ============ 移动端底部 tab 栏（≤768px）============ */
+.mobile-tabs { display: none; }
+
+@media (max-width: 768px) {
+  .mobile-tabs {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: var(--surface-1, #1a1d24); border-top: 1px solid var(--border, #2a2f3a);
+    justify-content: space-around; padding: 4px 0 env(safe-area-inset-bottom, 4px);
+  }
+  .mobile-tabs .mtab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: none; border: 0; color: var(--text-dim, #8a8f99); font-size: 10px;
+    padding: 6px 2px; min-height: 44px; cursor: pointer;
+  }
+  .mobile-tabs .mtab.active { color: var(--accent, #f5a623); }
+  .mobile-tabs .mtab-icon { font-size: 18px; line-height: 1; }
+  .mobile-tabs .mtab-label { font-size: 10px; }
+  .sidebar { display: none; }
+  .layout { grid-template-columns: 1fr !important; }
+  .main { padding-bottom: 64px; }
+}
