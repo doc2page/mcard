@@ -1,9 +1,9 @@
 /*
- * dashboard.js — 全屏面板逻辑（扩展页面，可访问 chrome.* API）
+ * app.js — 全屏面板逻辑（Web 前端，fetch + SSE 通信）
  *
  * 数据流：
- *   chrome.runtime.sendMessage GET_STATE  ← background
- *   chrome.storage.local.onChanged        → 实时刷新（采集到新数据时）
+ *   fetch /api/state (GET_STATE)       ← 后端
+ *   EventSource /events (state 推送)   → 实时刷新（采集到新数据时）
  * 渲染策略：renderAll（含配置输入）仅在初始化/勾选集合变化时调用；
  *           renderLive（状态+卡片）在数据变化时调用，避免打断阈值输入。
  */
@@ -101,19 +101,12 @@ async function refresh(changedKeys) {
   else renderLive(changedKeys);
 }
 
-// storage 变化时实时刷新（采集落盘即触发）
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
-  const keys = Object.keys(changes || {});
-  if (keys.indexOf('lockedCards') !== -1) {
-    // 手动锁变化：直接更新内存 Set + 重绘持有，不走 GET_STATE（纯本地状态，避免 background 往返）
-    lockedSet = new Set((changes.lockedCards.newValue) || []);
-    if (view === 'inventory') renderInventory();
-    const rest = keys.filter(function (k) { return k !== 'lockedCards'; });
-    if (rest.length) refresh(rest);
-    return;
-  }
-  refresh(keys);
+// SSE：后端 state 变更推送。复用 refresh(keys)→renderAll/renderLive（采集落盘即触发）。
+const es = new EventSource('/events');
+es.addEventListener('state', (e) => {
+  let patch;
+  try { patch = JSON.parse(e.data).patch || {}; } catch (err) { return; }
+  refresh(Object.keys(patch));
 });
 
 // ---------- 全量渲染（初始化 / 勾选集合变化） ----------
@@ -718,7 +711,7 @@ function buildCard(it, delay) {
   wrap.appendChild(el('div', { cls: badgeCls, text: badgeText }));
   // 右上：跳转按钮（新标签打开详情）
   const openBtn = el('button', { cls: 'ca-open', attrs: { title: t('card.openInNewTab') }, text: '↗' });
-  openBtn.onclick = (e) => { e.stopPropagation(); chrome.tabs.create({ url }); };
+  openBtn.onclick = (e) => { e.stopPropagation(); window.open(url, '_blank'); };
   wrap.appendChild(openBtn);
   // 右下：title（药丸，按等级配色；机制卡不显示——固定傳火无信息量）
   if (it.title && !isMech) {
@@ -1217,7 +1210,7 @@ function buildTradeCard(it, delay) {
   // 左上：稀有度/机制卡 badge
   wrap.appendChild(el('div', { cls: 'rarity-badge ' + (isMech ? 'r-mech' : 'r-' + rarity), text: isMech ? t('card.badgeMech') : (RARITY_LABEL[rarity] || rarity) }));
   const openBtn = el('button', { cls: 'ca-open', attrs: { title: t('card.openInNewTabDetail') }, text: '↗' });
-  openBtn.onclick = (e) => { e.stopPropagation(); chrome.tabs.create({ url }); };
+  openBtn.onclick = (e) => { e.stopPropagation(); window.open(url, '_blank'); };
   wrap.appendChild(openBtn);
   if (it.title && !isMech) {
     const tier = TITLE_TIER[it.title] || 'tt-5';
@@ -3297,17 +3290,15 @@ async function runBatch(items, onStep, shouldAbort) {
 }
 
 // ============ 手动锁定（用户主动锁，独立于交易锁 tradeLockUntil） ============
-var lockedSet = new Set();  // 用户锁定 cardId 集合，镜像 chrome.storage.local.lockedCards（跨会话持久）
+var lockedSet = new Set();  // 用户锁定 cardId 集合，跨会话持久（localStorage mcard.lockedCards）
 function isUserLocked(card) { return lockedSet.has(card.cardId); }
 function persistLocked() {
-  try { chrome.storage.local.set({ lockedCards: Array.from(lockedSet) }); } catch (e) {}
+  try { localStorage.setItem('mcard.lockedCards', JSON.stringify(Array.from(lockedSet))); } catch (e) {}
 }
-// 启动读取（异步；读到后若已在 inventory 视图则补绘，防首次渲染锁态未就绪）
+// 启动读取（同步读 localStorage；读到后若已在 inventory 视图则补绘，防首次渲染锁态未就绪）
 try {
-  chrome.storage.local.get('lockedCards', function (res) {
-    lockedSet = new Set((res && res.lockedCards) || []);
-    if (view === 'inventory') renderInventory();
-  });
+  lockedSet = new Set(JSON.parse(localStorage.getItem('mcard.lockedCards') || '[]'));
+  if (view === 'inventory') renderInventory();
 } catch (e) {}
 
 // ============ 批量操作：点卡片选择 + 悬浮面板 ============
@@ -3805,7 +3796,7 @@ function buildInventoryCard(it, delay) {
   wrap.appendChild(fallback);
   wrap.appendChild(el('div', { cls: 'rarity-badge ' + (isMech ? 'r-mech' : 'r-' + rarity), text: isMech ? t('card.badgeMech') : (RARITY_LABEL[rarity] || rarity) }));
   const openBtn = el('button', { cls: 'ca-open', attrs: { title: t('card.openInNewTabDetail') }, text: '↗' });
-  openBtn.onclick = (e) => { e.stopPropagation(); chrome.tabs.create({ url }); };
+  openBtn.onclick = (e) => { e.stopPropagation(); window.open(url, '_blank'); };
   wrap.appendChild(openBtn);
   if (it.title && !isMech) {
     const tier = TITLE_TIER[it.title] || 'tt-5';
@@ -4043,7 +4034,7 @@ function buildOrderCard(it, delay) {
   wrap.appendChild(fallback);
   wrap.appendChild(el('div', { cls: 'rarity-badge ' + (isMech ? 'r-mech' : 'r-' + rarity), text: isMech ? t('card.badgeMech') : (RARITY_LABEL[rarity] || rarity) }));
   const openBtn = el('button', { cls: 'ca-open', attrs: { title: t('card.openInNewTabDetail') }, text: '↗' });
-  openBtn.onclick = (e) => { e.stopPropagation(); chrome.tabs.create({ url }); };
+  openBtn.onclick = (e) => { e.stopPropagation(); window.open(url, '_blank'); };
   wrap.appendChild(openBtn);
   if (it.title && !isMech) {
     const tier = TITLE_TIER[it.title] || 'tt-5';
@@ -4402,43 +4393,44 @@ function mergeImportedData(cur, incoming) {
 const EXPORT_KEYS = ['config'];
 // 导出：config 固定导出
 function onExport() {
-  chrome.storage.local.get(EXPORT_KEYS, (data) => {
-    const mask = el('div', { cls: 'modal-mask' });
-    const box = el('div', { cls: 'modal' });
-    const head = el('div', { cls: 'modal-head' });
-    append(head, el('div', { cls: 'modal-icon', text: '↧' }), el('div', { cls: 'modal-title', text: t('common.exportTitle') }));
-    box.appendChild(head);
-    const body = el('div', { cls: 'modal-body' });
-    append(body, el('div', { cls: 'modal-note', text: t('common.exportNote') }));
-    box.appendChild(body);
-    const actions = el('div', { cls: 'modal-actions' });
-    const cancelBtn = el('button', { cls: 'btn ghost', text: t('common.cancel') });
-    const dlBtn = el('button', { cls: 'btn primary', text: t('panel.export') });
-    append(actions, cancelBtn, dlBtn);
-    box.appendChild(actions);
-    mask.appendChild(box);
-    document.body.appendChild(mask);
-    requestAnimationFrame(() => mask.classList.add('show'));
-    let done = false;
-    const close = () => { if (done) return; done = true; mask.classList.remove('show'); setTimeout(() => mask.remove(), 220); };
-    cancelBtn.onclick = close;
-    mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
-    dlBtn.onclick = () => {
-      const out = {};
-      if (data.config) {
-        const cfg = Object.assign({}, data.config);
-        out.config = cfg;
-      }
-      const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'mteam-monitor-data.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      showToast(t('common.exportSuccess'), 'success');
-      close();
-    };
-  });
+  // Web 端：config 由后端 state 提供（GET_STATE 已脱敏 apiKey 为 '(set)'），直接读内存。
+  const data = { config: (state && state.config) ? Object.assign({}, state.config) : null };
+  const mask = el('div', { cls: 'modal-mask' });
+  const box = el('div', { cls: 'modal' });
+  const head = el('div', { cls: 'modal-head' });
+  append(head, el('div', { cls: 'modal-icon', text: '↧' }), el('div', { cls: 'modal-title', text: t('common.exportTitle') }));
+  box.appendChild(head);
+  const body = el('div', { cls: 'modal-body' });
+  append(body, el('div', { cls: 'modal-note', text: t('common.exportNote') }));
+  box.appendChild(body);
+  const actions = el('div', { cls: 'modal-actions' });
+  const cancelBtn = el('button', { cls: 'btn ghost', text: t('common.cancel') });
+  const dlBtn = el('button', { cls: 'btn primary', text: t('panel.export') });
+  append(actions, cancelBtn, dlBtn);
+  box.appendChild(actions);
+  mask.appendChild(box);
+  document.body.appendChild(mask);
+  requestAnimationFrame(() => mask.classList.add('show'));
+  let done = false;
+  const close = () => { if (done) return; done = true; mask.classList.remove('show'); setTimeout(() => mask.remove(), 220); };
+  cancelBtn.onclick = close;
+  mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+  dlBtn.onclick = () => {
+    const out = {};
+    if (data.config) {
+      const cfg = Object.assign({}, data.config);
+      delete cfg.apiKey;  // 凭证不入导出文件（原扩展 apiKey 独立于 config 存储，此处对齐脱敏语义）
+      out.config = cfg;
+    }
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'mteam-monitor-data.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast(t('common.exportSuccess'), 'success');
+    close();
+  };
 }
 // 导入数据：模态窗选文件 + 校验，校验通过才允许导入
 function onImport() {
@@ -4501,12 +4493,13 @@ function onImport() {
     }
     input.value = '';
   };
-  confirmBtn.onclick = () => {
+  confirmBtn.onclick = async () => {
     if (!parsed) return;
-    chrome.storage.local.get(null, (cur) => {
-      const merged = mergeImportedData(cur, parsed);
-      chrome.storage.local.set(merged, () => { showToast(t('common.importSuccess'), 'success'); close(); });
-    });
+    // Web 端：合并后经 SET_CONFIG 落盘后端（setConfig 会 deepMerge 并剔除 apiKey）。
+    const merged = mergeImportedData({ config: state.config || {} }, parsed);
+    await send({ type: 'SET_CONFIG', config: merged.config });
+    showToast(t('common.importSuccess'), 'success');
+    close();
   };
 }
 
@@ -4733,13 +4726,8 @@ function setLang(lang) {
   renderAll();
 }
 function patchConfigLang(lang) {
-  try {
-    chrome.storage.local.get('config', function (res) {
-      var cfg = (res && res.config) || {};
-      cfg.lang = lang;
-      chrome.storage.local.set({ config: cfg });
-    });
-  } catch (e) {}
+  // Web 端：lang 走 SET_CONFIG 增量合并（后端 deepMerge 仅改 lang 字段）。
+  send({ type: 'SET_CONFIG', config: { lang: lang } });
 }
 
 function initTheme() {
