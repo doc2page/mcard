@@ -74,7 +74,7 @@ export function createTrader({ state, mteam, collector }) {
       // 购买后刷新该卡所属分类（机制卡→MECH，普通→rarity）；批量调用传 skipRefresh 跳过逐张刷新（整批后前端统一刷）
       if (!msg.skipRefresh) {
         const key = isMechCard(variant) ? 'MECH' : (variant.rarity || null);
-        collector.triggerRefreshRound('buy', key ? [key] : null).catch((e) => console.warn('[MTEAM] refresh trigger failed', e));
+        collector.triggerRefreshRound('buy', key ? [key] : null).catch((e) => console.warn('[mcard] refresh trigger failed', e));
       }
       return { ok: true, confirmed: true, price: trade.price, trade: trade };
     }
@@ -113,8 +113,8 @@ export function createTrader({ state, mteam, collector }) {
     // 成功：刷新持有（卡已挂卖单）+ 当前挂单（新挂单）。批量模式（msg.skipRefresh）跳过逐张刷新，由 dashboard 整批后统一刷一次
     if (!msg.skipRefresh) {
       await Promise.all([
-        collector.ensureInventoryData(true).catch((e) => console.warn('[MTEAM] inventory refresh after sell failed', e)),
-        collector.ensureMyOrders(true).catch((e) => console.warn('[MTEAM] orders refresh after sell failed', e)),
+        collector.ensureInventoryData(true).catch((e) => console.warn('[mcard] inventory refresh after sell failed', e)),
+        collector.ensureMyOrders(true).catch((e) => console.warn('[mcard] orders refresh after sell failed', e)),
       ]);
     }
     return { ok: true };
@@ -135,8 +135,8 @@ export function createTrader({ state, mteam, collector }) {
     // 成功：刷新挂单（取消的消失）+ 持有（卡回到持有）。批量模式（msg.skipRefresh）跳过逐张刷新，由 dashboard 整批后统一刷一次
     if (!msg.skipRefresh) {
       await Promise.all([
-        collector.ensureMyOrders(true).catch((e) => console.warn('[MTEAM] orders refresh after cancel failed', e)),
-        collector.ensureInventoryData(true).catch((e) => console.warn('[MTEAM] inventory refresh after cancel failed', e)),
+        collector.ensureMyOrders(true).catch((e) => console.warn('[mcard] orders refresh after cancel failed', e)),
+        collector.ensureInventoryData(true).catch((e) => console.warn('[mcard] inventory refresh after cancel failed', e)),
       ]);
     }
     return { ok: true };
