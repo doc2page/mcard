@@ -35,3 +35,25 @@ test('setConfig 嵌套合并不丢字段', async () => {
   assert.equal(cfg.budget.total, 500);
   assert.ok(Array.isArray(cfg.rarities));
 });
+
+test('refreshAll 调用各 ensure 并返回 ok', async () => {
+  const d = deps({ mtFetch: async (path) => {
+    if (path === '/api/pt-card/market/list') return { code: '0', data: { data: [] } };
+    return { code: '0', data: { data: [], total: 0 } };
+  }, verifyApiKey: async () => ({ ok: true }) });
+  const col = createCollector(d);
+  const r = await col.refreshAll();
+  assert.equal(r.ok, true);
+});
+
+test('clearData 清空市场数据', async () => {
+  const d = deps({ mtFetch: async () => ({ code: '0', data: { data: [] } }), verifyApiKey: async () => ({ ok: true }) });
+  await d.state.update({ buckets: { UR: { items: [{ x: 1 }] } }, history: [{ x: 1 }], marketHistory: [{ x: 1 }] });
+  const col = createCollector(d);
+  const r = await col.clearData();
+  assert.equal(r.ok, true);
+  const s = d.state.getState();
+  assert.deepEqual(s.buckets, {});
+  assert.equal(s.history.length, 0);
+  assert.equal(s.marketHistory.length, 0);
+});

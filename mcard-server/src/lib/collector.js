@@ -25,6 +25,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   let lastCardLogFetchAt = 0;
   let _inventoryPromise = null;
   let lastInventoryFetchAt = 0;
+  let _dropPromise = null;
 
   async function fetchMarketList(rarity, pageSize) {
     const body = rarity === 'MECH'
@@ -486,12 +487,21 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     return added;
   }
 
-  // feed 增量直连（最新 25 条），不走 tab。
+  // feed 增量直连（最新 25 条），不走 tab。单例去重 + try/catch，与其它 ensure* 一致。
   async function ensureDropStats() {
-    const r = await syncList('/api/pt-card/feed', mergeDropFeed, 25, 'incremental');
-    const cur = await state.getState();
-    await state.update({ dropStats: Object.assign({}, cur.dropStats || {}, { lastFeedAt: Date.now() }) });
-    return { ok: true, dropsAdded: r.added };
+    if (_dropPromise) return _dropPromise;
+    _dropPromise = (async () => {
+      const out = { ok: true };
+      try {
+        const r = await syncList('/api/pt-card/feed', mergeDropFeed, 25, 'incremental');
+        out.dropsAdded = r.added;
+        const cur = await state.getState();
+        await state.update({ dropStats: Object.assign({}, cur.dropStats || {}, { lastFeedAt: Date.now() }) });
+      } catch (e) { console.warn('[mcard] drop feed failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      finally { _dropPromise = null; }
+      return out;
+    })();
+    return _dropPromise;
   }
 
   // ============ 询价：orderbook 直连（取最高买价 bids[0]，bids 按价格降序）============
@@ -553,9 +563,11 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   // ============ 配置：嵌套合并（deepMerge，不丢字段）============
   async function setConfig(config) {
     if (!config) return { ok: false };
+    const safe = Object.assign({}, config);
+    delete safe.apiKey;   // 只能经 /api/config（verifyApiKey 验证）设置
+    delete safe.apiBase;
     const st = await state.getState();
-    const prev = st.config || {};
-    const merged = deepMerge(prev, config);
+    const merged = deepMerge(st.config || {}, safe);
     await state.update({ config: merged });
     return { ok: true };
   }

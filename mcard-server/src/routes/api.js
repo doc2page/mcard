@@ -52,13 +52,21 @@ export function createApiRouter({ state, collector, trader, mteam }) {
 
   router.get('/api/orderbook', async (req, res) => {
     const { filmId, provenance, rarity } = req.query;
-    res.json(await collector.queryOrderbook(filmId, provenance, rarity));
+    try {
+      res.json(await collector.queryOrderbook(filmId, provenance, rarity));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
   router.post('/api/search', async (req, res) => {
     const { tags, pageSize } = req.body || {};
-    res.json(await collector.searchMarket(tags, pageSize));
+    try {
+      res.json(await collector.searchMarket(tags, pageSize));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
-  router.post('/api/setconfig', async (req, res) => res.json(await collector.setConfig(req.body || {})));
+  router.post('/api/setconfig', async (req, res) => {
+    try {
+      res.json(await collector.setConfig(req.body || {}));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
 
   return router;
 }

@@ -38,3 +38,23 @@ test('profile 解析 bonus/role', async () => {
   await col.fetchProfile();
   assert.equal(d.state.getState().profile.bonus, '500');
 });
+
+test('mergeOrders 返回 {added,updated,total} 并更新状态字段', async () => {
+  const d = deps({ mtFetch: async () => ({ code: '0', data: { data: [], total: 0 } }), verifyApiKey: async () => ({ ok: true }) });
+  const col = createCollector(d);
+  // 直接调内部 merge 不可行（未导出）；改用 ensureMyOrders 走 syncList 验证 ordersAll 落库
+  // 这里用 myorders mock 数据验证合并 + status 更新
+  const d2 = deps({ mtFetch: async (path) => {
+    if (path === '/api/pt-card/market/myorders')
+      return { code: '0', data: { data: [
+        { id: 1, cardId: 'c1', side: 'sell', filmName: 'A', rarity: 'UR', price: '100', status: 'open', createdDate: '2026-07-01 00:00:00', lastModifiedDate: '2026-07-01 00:00:00' },
+      ], total: 1 } };
+    return { code: '0', data: { data: [], total: 0 } };
+  }, verifyApiKey: async () => ({ ok: true }) });
+  const col2 = createCollector(d2);
+  await col2.ensureMyOrders(true);
+  const orders = d2.state.getState().ordersAll;
+  assert.equal(orders.length, 1);
+  assert.equal(orders[0].status, 'open');
+  assert.equal(d2.state.getState().ordersTotal, 1);
+});

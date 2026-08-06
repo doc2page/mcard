@@ -20,6 +20,7 @@ function req(server, method, p, body) {
 test('装配后 health + state + collect(unknown) 可用', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcard-'));
   const { server } = createServer({ dbPath: path.join(dir, 's.db'), port: 0 });
+  await new Promise((r) => server.once('listening', r));  // 绑定到显式 host 时 address() 在 listening 前为 null
   try {
     const h = await req(server, 'GET', '/health');
     assert.equal(h.json.ok, true);

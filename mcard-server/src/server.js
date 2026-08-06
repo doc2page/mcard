@@ -62,7 +62,8 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
   app.use(createApiRouter({ state, collector, trader, mteam }));
   app.use(createSseRouter({ state }));
 
-  const server = app.listen(port ?? (Number(process.env.PORT) || 3000));
+  const host = process.env.HOST || '127.0.0.1';
+  const server = app.listen(port ?? (Number(process.env.PORT) || 3000), host);
   return { app, server, state, store };
 }
 
