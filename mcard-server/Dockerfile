@@ -18,9 +18,9 @@ RUN mkdir -p data
 
 # 容器内绑所有接口（安全靠宿主网络/反代/Tailscale；见 spec 第 14 节）
 ENV HOST=0.0.0.0
-ENV PORT=3000
+ENV PORT=31414
 
 VOLUME /app/data
-EXPOSE 3000
+EXPOSE 31414
 
 CMD ["node", "src/server.js"]
