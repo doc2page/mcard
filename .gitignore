@@ -1,0 +1,154 @@
+# === Dependencies ===
+node_modules/
+.pnp
+.pnp.js
+jspm_packages/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+.venv
+
+# Python virtual env
+venv/
+ENV/
+env/
+.venv
+*.venv
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+vendor/
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+target/
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradle/
+.gradle-wrapper/
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# === Build Output ===
+dist/
+build/
+*.log
+*.tsbuildinfo
+
+# === Environment & Secrets ===
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+secrets/
+credentials/
+*.creds
+.secrets/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# === OS ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# === Cache & Temp ===
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# === Testing ===
+coverage/
+*.lcov
+.nyc_output/
+.jest/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# === Misc ===
+*.pid
+*.seed
+*.pid.lock
+.lock-wscript
+.sourcemaps/
+bower_components/
+
+# === Claude Code ===
+.claude/
