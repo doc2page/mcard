@@ -358,6 +358,9 @@ function toggleView(v) {
   document.querySelectorAll('.mobile-tabs .mtab').forEach(function (b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
   });
+  // 移动端抽屉：切 view 后自动关闭
+  var _sb = document.querySelector('.sidebar'); if (_sb) _sb.classList.remove('open');
+  var _mk = $('drawerMask'); if (_mk) _mk.classList.remove('open');
 }
 
 // 聚合各数据源算画像（资料卡称号/氛围色 + 画像页复用）
@@ -4964,6 +4967,16 @@ function applyLabUrl() {
       var loadType = { trades: 'LOAD_TRADES', orders: 'LOAD_ORDERS', inventory: 'LOAD_INVENTORY', dropStats: 'LOAD_DROP_STATS', marketData: 'LOAD_MARKET_DATA' }[v];
       if (loadType) send({ type: loadType });
     });
+  });
+  // 移动端抽屉：hamburger 开/合 + 遮罩点击关闭
+  var _mt = $('menuToggle'), _mk = $('drawerMask'), _sb = document.querySelector('.sidebar');
+  if (_mt && _sb) _mt.addEventListener('click', function () {
+    var open = _sb.classList.toggle('open');
+    if (_mk) _mk.classList.toggle('open', open);
+  });
+  if (_mk) _mk.addEventListener('click', function () {
+    if (_sb) _sb.classList.remove('open');
+    _mk.classList.remove('open');
   });
   initBackTop();
   initTradesSearch();
