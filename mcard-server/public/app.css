@@ -1866,4 +1866,8 @@ body.no-token .layout > main { display: none !important; }
   /* 主区单列 */
   .layout { grid-template-columns: 1fr !important; }
   .main { padding: 0 12px 24px; }
+  /* 卡片网格密集：大屏手机 3 列 / 小屏 2 列；缩标签防窄卡片拥挤 */
+  .grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) !important; gap: 8px; }
+  .rarity-badge { font-size: 10px; padding: 3px 7px; top: 5px; left: 5px; }
+  .title-tag { font-size: 10px; padding: 3px 7px; bottom: 5px; right: 5px; max-width: calc(100% - 10px); }
 }
