@@ -275,6 +275,13 @@
     <button type="button" class="mtab" data-view="marketData"><span class="mtab-icon">📈</span><span class="mtab-label">数据</span></button>
   </nav>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('[mcard] SW register failed', e); });
+      });
+    }
+  </script>
   <script src="shared.js"></script>
   <script src="portrait.js"></script>
   <script src="marketStats.js"></script>
