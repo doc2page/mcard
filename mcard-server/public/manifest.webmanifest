@@ -1,0 +1,16 @@
+{
+  "name": "MCard · M-Team 卡牌市场工具",
+  "short_name": "MCard",
+  "description": "M-Team 卡牌市场手动工具",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0c10",
+  "theme_color": "#f5a623",
+  "icons": [
+    { "src": "logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
