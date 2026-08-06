@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
     apiKey: '',
     apiBase: '',
     webBase: '',
+    lockedCards: [],
   },
   isRoundRunning: false,
   buckets: {},

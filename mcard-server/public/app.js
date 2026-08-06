@@ -114,6 +114,7 @@ es.addEventListener('state', (e) => {
 
 // ---------- 全量渲染（初始化 / 勾选集合变化） ----------
 function renderAll() {
+  lockedSet = new Set(((state && state.config && state.config.lockedCards) || []));  // 锁定状态从后端同步（跨设备）
   renderStatus();
   renderConfig();
   buildMarketTitleChips();
@@ -3300,16 +3301,11 @@ async function runBatch(items, onStep, shouldAbort) {
 }
 
 // ============ 手动锁定（用户主动锁，独立于交易锁 tradeLockUntil） ============
-var lockedSet = new Set();  // 用户锁定 cardId 集合，跨会话持久（localStorage mcard.lockedCards）
+var lockedSet = new Set();  // 用户锁定 cardId 集合，跨设备同步（state.config.lockedCards；renderAll 时从后端重建）
 function isUserLocked(card) { return lockedSet.has(card.cardId); }
 function persistLocked() {
-  try { localStorage.setItem('mcard.lockedCards', JSON.stringify(Array.from(lockedSet))); } catch (e) {}
+  send({ type: 'SET_CONFIG', config: { lockedCards: Array.from(lockedSet) } });
 }
-// 启动读取（同步读 localStorage；读到后若已在 inventory 视图则补绘，防首次渲染锁态未就绪）
-try {
-  lockedSet = new Set(JSON.parse(localStorage.getItem('mcard.lockedCards') || '[]'));
-  if (view === 'inventory') renderInventory();
-} catch (e) {}
 
 // ============ 批量操作：点卡片选择 + 悬浮面板 ============
 var batchInView = null;        // null | 'inventory' | 'orders'（当前选择所在 view）
