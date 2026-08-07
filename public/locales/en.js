@@ -236,6 +236,8 @@ registerMessages('en', {
   'inv.metricTotal': 'Total holdings',
   'inv.metricTradable': 'Tradable',
   'inv.metricLocked': 'Locked',
+  'inv.showLocked': 'Show Locked',
+  'inv.showLockedHint': 'Manually locked cards are hidden by default; check to show',
   'inv.metricUsed': 'Used mechanic cards',
   'inv.usedTitle': 'Used mechanic cards',
   'inv.usedEmpty': 'None',

@@ -63,7 +63,7 @@ let tradesSortDir = 'desc';  // 交易记录排序
 let apiKeyInvalidShown = false;  // 令牌失效弹窗会话级去重（避免每次 state 更新都弹；用户保存新 key 后重置）
 let tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null }; // 交易记录搜索条件（前端临时；exact=精确等于，否则模糊包含；side=buy/sell 筛选）
 let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set() }; // 挂单搜索条件（前端临时）
-let inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/锁定多选）
+let inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/交易锁多选；showLocked=显示手动锁定的卡，默认隐藏）
 
 function send(msg) {
   const d = window.dispatch(msg);
@@ -3116,7 +3116,8 @@ function filterInventory(list) {
   const hasTitle = f.titles && f.titles.size > 0;
   const hasSource = f.source && f.source.size > 0;
   const hasLock = !!f.lock;
-  if (!kws.length && !hasRarity && !hasTitle && !hasSource && !hasLock) return list;
+  const hideUserLocked = !f.showLocked;  // 默认隐藏手动锁定的卡（独立于交易锁 tradeLockUntil）
+  if (!kws.length && !hasRarity && !hasTitle && !hasSource && !hasLock && !hideUserLocked) return list;
   return list.filter((it) => {
     const mech = isMechCard(it);
     if (hasRarity) {
@@ -3129,6 +3130,7 @@ function filterInventory(list) {
       const src = (Number.isFinite(num) && num === 0) ? 'crafted' : 'drop';
       if (!f.source.has(src)) return false;
     }
+    if (hideUserLocked && isUserLocked(it)) return false;
     if (hasLock) {
       const lockUntil = parseMtTime(it.tradeLockUntil);
       if (!(Number.isFinite(lockUntil) && lockUntil > Date.now())) return false;
@@ -3857,7 +3859,7 @@ function buildInventoryCard(it, delay) {
 // 稀有度筛选 chips：每次 renderInventory 重建（文本实时取，防切语言 stale）
 // 稀有度/机制卡筛选 chips 公共构造（持有/交易/挂单三视图共用）
 // 筛选 chips 公共构造（分组：稀有度[含机制卡] → 来源[持有独有] → 称号）
-function buildFilterChips(boxId, filterObj, renderFn, withSource) {
+function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
   const box = $(boxId);
   if (!box) return;
   box.replaceChildren();
@@ -3899,6 +3901,15 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource) {
       renderFn();
     }));
   });
+  // 手动锁开关（持有独有）：称号后，文字 + 勾选框；默认隐藏手动锁卡，勾选后显示
+  if (withLock) {
+    const lbl = el('label', { cls: 'chip-group-label inv-lock-toggle', attrs: { title: t('inv.showLockedHint') } });
+    append(lbl, el('span', { text: t('inv.showLocked') }), el('input', { attrs: { type: 'checkbox' } }));
+    const cb = lbl.querySelector('input');
+    cb.checked = !!filterObj.showLocked;
+    cb.addEventListener('change', () => { filterObj.showLocked = cb.checked; renderFn(); });
+    box.appendChild(lbl);
+  }
 }
 // 市场称号筛选（多选，空=不限；称号名站点术语不译，切语言经 renderAll 重建）
 let marketTitleFilter = new Set();
@@ -4021,7 +4032,7 @@ async function runSearch() {
   searching = false;
   renderCards();
 }
-function buildInventoryChips() { buildFilterChips('inventoryRarityBox', inventoryFilter, renderInventory, true); }
+function buildInventoryChips() { buildFilterChips('inventoryRarityBox', inventoryFilter, renderInventory, true, true); }
 function buildTradesChips() { buildFilterChips('tradeRarityBox', tradesFilter, renderTrades, false); }
 function buildOrdersChips() { buildFilterChips('orderRarityBox', ordersFilter, renderOrders, false); }
 
@@ -5060,7 +5071,7 @@ function initInventorySearch() {
   if (ex) ex.addEventListener('change', (e) => { inventoryFilter.exact = e.target.checked; renderInventory(); });
   const clr = $('inventorySearchClear');
   if (clr) clr.onclick = () => {
-    inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false };
+    inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false };
     if (txt) txt.value = '';
     if (ex) ex.checked = false;
     renderInventory(); // buildInventoryChips 依新 inventoryFilter 重建 chips 选中态，无需手动清 on

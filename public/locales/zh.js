@@ -241,6 +241,8 @@ registerMessages('zh', {
   'inv.metricTotal': '总持有',
   'inv.metricTradable': '可交易',
   'inv.metricLocked': '锁定中',
+  'inv.showLocked': '显示锁定',
+  'inv.showLockedHint': '默认隐藏手动锁定的卡片；勾选后显示',
   'inv.metricUsed': '已使用的机制卡',
   'inv.usedTitle': '已使用的机制卡',
   'inv.usedEmpty': '暂无',
