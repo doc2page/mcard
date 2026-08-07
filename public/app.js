@@ -58,6 +58,7 @@ const BUY_FAIL_REASON = {
   error: 'err.error',
 };
 let state = null;
+const PORTRAIT_SPAN_SINCE = '2026-07-01 00:00:00';  // 用户画像消费维度统计起点（固定 7/1，与掉落统计动态 since 无关）
 let view = 'market'; // 卡片区视图：'market'(市场卡牌) | 'trades'(购买记录) | 'orders'(当前挂单)
 let ordersSortDir = 'desc';  // 当前挂单排序：'desc'(最新在上) | 'asc'(最早在上)
 let invSortDir = 'desc';     // 持有卡片排序
@@ -391,7 +392,7 @@ function currentPortrait() {
   return computePortrait({
     bonus: p.bonus, finalBs: bn.finalBs,
     buySum: tr.buy.sum, sellSum: tr.sell.sum, buyCount: tr.buy.count, sellCount: tr.sell.count,
-    spanDays: ds.totalDays, rarityScore: ds.rarityScore,
+    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore,
     cardCount: cl.count, cardAvg: cl.avg, cardMax: cl.max, cardMin: cl.min,
   });
 }
@@ -1811,7 +1812,7 @@ function renderPortraitView() {
   const pt = computePortrait({
     bonus: p.bonus, finalBs: bn.finalBs,
     buySum: tr.buy.sum, sellSum: tr.sell.sum, buyCount: tr.buy.count, sellCount: tr.sell.count,
-    spanDays: ds.totalDays, rarityScore: ds.rarityScore,
+    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore,
     cardCount: cl.count, cardAvg: cl.avg, cardMax: cl.max, cardMin: cl.min,
   });
 
