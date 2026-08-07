@@ -20,7 +20,7 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 
 ## Quick start
 
-From the `mcard-server` directory:
+From the project root:
 
 ```bash
 docker compose up -d --build
@@ -72,7 +72,6 @@ npm test       # run tests
 ## Project structure
 
 ```
-mcard-server/
 ├── docker-compose.yml      # one-command orchestration
 ├── Dockerfile              # Node 20 + better-sqlite3 build
 ├── package.json

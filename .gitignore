@@ -153,8 +153,14 @@ bower_components/
 # === Claude Code ===
 .claude/
 
-# === mcard-server 例外 ===
-# 上方 Python 段的 lib/ 会误伤 mcard-server/src/lib/（Node 源码目录）。
+# === 项目数据 / 缓存 ===
+data/*.db
+data/*.db-shm
+data/*.db-wal
+.playwright-mcp/
+
+# === src/lib 例外 ===
+# 上方 Python 段的 lib/ 会误伤 src/lib/（Node 源码目录）。
 # 先重新包含目录本身，git 才会下钻；再重新包含其内容。
-!mcard-server/src/lib/
-!mcard-server/src/lib/**
+!src/lib/
+!src/lib/**

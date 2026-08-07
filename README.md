@@ -20,7 +20,7 @@
 
 ## 快速开始
 
-在 `mcard-server` 目录下：
+在项目根目录：
 
 ```bash
 docker compose up -d --build
@@ -72,7 +72,6 @@ npm test       # 运行测试
 ## 项目结构
 
 ```
-mcard-server/
 ├── docker-compose.yml      # 一键编排
 ├── Dockerfile              # Node 20 + better-sqlite3 编译
 ├── package.json
