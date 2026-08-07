@@ -1872,7 +1872,7 @@ body.no-token .layout > main { display: none !important; }
   .drawer-mask.open { opacity: 1; pointer-events: auto; }
   /* 主区单列；缩 layout 左右内边距（桌面 28px 在移动太宽，挤压卡片列数）*/
   .layout { grid-template-columns: 1fr !important; padding: 0 12px 16px; gap: 0; }
-  .main { padding: 0; overflow-x: hidden; }  /* overflow-y:auto 会把 overflow-x 强制为 auto，这里显式 hidden 防横向滚动 */
+  .main { padding: 0 0 calc(60px + env(safe-area-inset-bottom)); overflow-x: hidden; }  /* 底部留白：滚动区最后内容不被浏览器工具栏/iPhone home 条遮挡 */
   .main-toolbar { margin-left: 0; margin-right: 0; }  /* 去掉负 margin：移动端 main 无左右 padding，-6px 会撑出 6px 横向滚动 */
   /* 卡片网格密集：大屏手机 3 列 / 小屏 2 列；缩标签防窄卡片拥挤 */
   .grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) !important; gap: 8px; }
@@ -1888,4 +1888,20 @@ body.no-token .layout > main { display: none !important; }
   body[data-view="orders"] .trade-price-unit { display: none; }
   /* 顶部结果摘要限宽，超宽自动换行，避免挤掉右侧「返回市场」按钮 */
   .result-summary { max-width: 55%; }
+  /* 交易卡片买家/卖家 id 数字移动端缩小 */
+  .trade-counter { font-size: 9px; }
+  /* 卡片按钮 + 对手 label 移动端缩小（市场购买/持有询价卖出/挂单修改）*/
+  .trade-col-label { font-size: 8px; }
+  .ca-btn { font-size: 10px; padding: 3px 7px; min-width: 36px; }
+  .inv-ask-btn, .inv-sell-btn { font-size: 9px; padding: 2px 4px; }
+  /* 批量模态移动端：限最大宽度、缩字号/列宽防溢出 */
+  .modal-mask { padding: 8px; }
+  .modal { max-width: calc(100vw - 16px); overflow-x: hidden; }
+  .batch-dialog { max-width: calc(100vw - 16px); max-height: 88vh; }
+  .batch-row, .batch-header { gap: 5px; padding: 5px 2px; font-size: 11px; }
+  .batch-row-name { width: auto; flex: 1 1 0; min-width: 0; font-size: 11px; }
+  .batch-row-status { width: auto; flex: 0 1 auto; min-width: 0; font-size: 11px; }
+  #batchModal[data-op="modify"] .batch-row-status { min-width: 0; }
+  .batch-row-remove { width: 22px; font-size: 12px; padding: 2px; }
+  .batch-dialog .th-input { font-size: 11px; padding: 3px 6px; max-width: 100%; }
 }
