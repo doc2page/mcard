@@ -96,20 +96,38 @@ function append(parent, ...kids) {
 }
 function $(id) { return document.getElementById(id); }
 
-// ---------- 数据拉取 ----------
-async function refresh(changedKeys) {
-  state = await send({ type: 'GET_STATE' });
-  // config 变化（导入/改设置）影响配置面板 + 所有视图过滤，全重建；其余按变化 key 选择性重建（保留防闪烁）
-  if (changedKeys && changedKeys.indexOf('config') !== -1) renderAll();
-  else renderLive(changedKeys);
+// patch 深合并（对象递归，数组/原始值直接覆盖）—— SSE 增量更新用，避免每次都拉全量 /api/state
+function mergeObj(a, b) {
+  const out = Object.assign({}, a);
+  for (const k of Object.keys(b || {})) {
+    const av = a[k], bv = b[k];
+    out[k] = (av && bv && typeof av === 'object' && typeof bv === 'object' && !Array.isArray(av) && !Array.isArray(bv)) ? mergeObj(av, bv) : bv;
+  }
+  return out;
+}
+function applyPatch(patch) {
+  if (!state) state = {};
+  for (const k of Object.keys(patch || {})) {
+    if (k === 'config') state.config = mergeObj(state.config || {}, patch.config || {});
+    else state[k] = patch[k];
+  }
 }
 
-// SSE：后端 state 变更推送。复用 refresh(keys)→renderAll/renderLive（采集落盘即触发）。
+// SSE：后端 state 变更推送。增量合并 patch → renderAll/renderLive（采集落盘即触发，不再拉全量 /api/state）。
 const es = new EventSource('/events');
+let esOpenedOnce = false;
+es.addEventListener('open', () => {
+  if (!esOpenedOnce) { esOpenedOnce = true; return; }  // 首次 open：init 已拉全量，跳过
+  // 重连后校准：补回断线期间漏掉的 patch（罕见，仅连接中断恢复时触发一次）
+  send({ type: 'GET_STATE' }).then((s) => { state = s; renderAll(); }).catch(() => {});
+});
 es.addEventListener('state', (e) => {
   let patch;
   try { patch = JSON.parse(e.data).patch || {}; } catch (err) { return; }
-  refresh(Object.keys(patch));
+  applyPatch(patch);  // 增量合并推送的 patch，不再每次拉全量 /api/state（采集时十几条 → 0）
+  const keys = Object.keys(patch);
+  if (keys.indexOf('config') !== -1) renderAll();
+  else renderLive(keys);
 });
 
 // ---------- 全量渲染（初始化 / 勾选集合变化） ----------
@@ -277,6 +295,7 @@ function renderConfig() {
 // ---------- live 部分：间隔标签 + 卡片 ----------
 function renderLive(changedKeys) {
   if (!state) return;
+  document.body.dataset.view = view;  // 同步当前视图到 body（供 CSS 按视图区分，如移动端隐藏价格单位）
   renderStatus();
   renderProfile();
   renderTokenPanel();
@@ -347,6 +366,7 @@ function renderToolbar() {
 }
 function toggleView(v) {
   view = v;
+  document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）
   if (batchInView && batchInView !== v) clearBatchSelection(false);  // 切 view 清批量选择（renderLive 会重绘新 view）
   // 切视图失效签名缓存：market/trades/orders/inventory 复用同一 grid，非市场视图清子节点但不清 _sig；
   // 若不清，切回市场时 renderCards 会因 sig 未变 + grid 非空误判"无变化"而跳过重绘，残留上一视图卡片
@@ -355,10 +375,6 @@ function toggleView(v) {
   renderLive();
   // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound
   if (v === 'market' && state && hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
-  // 移动端底部 tab 栏：同步 active 态到当前 view
-  document.querySelectorAll('.mobile-tabs .mtab').forEach(function (b) {
-    b.classList.toggle('active', b.getAttribute('data-view') === view);
-  });
   // 移动端抽屉：切 view 后自动关闭
   var _sb = document.querySelector('.sidebar'); if (_sb) _sb.classList.remove('open');
   var _mk = $('drawerMask'); if (_mk) _mk.classList.remove('open');
@@ -1484,6 +1500,9 @@ function renderDropStats() {
   append(hero, heroNumrow,
     el('div', { cls: 'drop-hero-sub', text: t('dropStats.perDay', { n: sum.avgPerDay.toFixed(1) }) })
   );
+  // 数据实际范围（since 随最新 25 条数据而定，不再固定 7/1）+ 接口限制说明
+  if (sum.rangeStart && sum.rangeEnd) hero.appendChild(el('div', { cls: 'drop-hero-range', text: sum.rangeStart + ' ~ ' + sum.rangeEnd }));
+  hero.appendChild(el('div', { cls: 'drop-hero-note', text: t('dropStats.feedNote') }));
 
   // KPI 行：总历时 / 掉落天数 / 最大连续 / 近7天日均
   const kpi = el('div', { cls: 'drop-kpi' });
@@ -4955,14 +4974,18 @@ function applyLabUrl() {
   if (_langBtn) _langBtn.addEventListener('click', function () { setLang(getI18nLang() === 'en' ? 'zh' : 'en'); });
   initTheme();
   renderAll();
-  // 移动端底部 tab 栏：点击切换 view + 触发对应数据加载
-  document.querySelectorAll('.mobile-tabs .mtab').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var v = btn.getAttribute('data-view');
-      toggleView(v);
-      var loadType = { trades: 'LOAD_TRADES', orders: 'LOAD_ORDERS', inventory: 'LOAD_INVENTORY', dropStats: 'LOAD_DROP_STATS', marketData: 'LOAD_MARKET_DATA' }[v];
-      if (loadType) send({ type: loadType });
-    });
+  // 移动端：交易/挂单/持有 顶部统计卡片折叠头（默认折叠，点击展开；头本身只在移动端+有数据时由 CSS 显示）
+  ['tradeStats', 'ordersStats', 'inventoryStats'].forEach(function (id) {
+    var box = document.getElementById(id);
+    if (!box || (box.previousElementSibling && box.previousElementSibling.classList.contains('stats-fold-head'))) return;
+    var head = document.createElement('button');
+    head.className = 'stats-fold-head'; head.type = 'button';
+    var ico = document.createElement('span'); ico.className = 'sf-ico'; ico.textContent = '📊';
+    var lbl = document.createElement('span'); lbl.className = 'sf-label'; lbl.setAttribute('data-i18n', 'panel.statsOverview'); lbl.textContent = t('panel.statsOverview');
+    var caret = document.createElement('i'); caret.className = 'sf-caret';
+    head.appendChild(ico); head.appendChild(lbl); head.appendChild(caret);
+    head.addEventListener('click', function () { box.classList.toggle('unfolded'); });
+    box.insertAdjacentElement('beforebegin', head);
   });
   // 移动端抽屉：hamburger 开/合 + 遮罩点击关闭
   var _mt = $('menuToggle'), _mk = $('drawerMask'), _sb = document.querySelector('.sidebar');

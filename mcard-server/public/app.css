@@ -673,7 +673,7 @@ button.stat.active .stat-val { color: var(--accent); }
 }
 .main::-webkit-scrollbar { width: 0; display: none; }
 .main-toolbar {
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px;
   margin: -4px -6px 16px;
@@ -1327,6 +1327,8 @@ button.stat.active .stat-val { color: var(--accent); }
 }
 .drop-hero-unit { font-size: 15px; color: var(--text-dim); font-weight: 600; }
 .drop-hero-sub { font-size: 12.5px; color: var(--muted); position: relative; }
+.drop-hero-range { font-size: 11.5px; color: var(--text-dim); position: relative; font-family: var(--font-mono); margin-top: 2px; }
+.drop-hero-note { font-size: 11px; color: var(--muted); position: relative; margin-top: 6px; opacity: .85; line-height: 1.5; }
 .drop-kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .drop-kpi-tile {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
@@ -1372,7 +1374,7 @@ button.stat.active .stat-val { color: var(--accent); }
 .drop-range { font-size: 11.5px; color: var(--muted); text-align: center; font-family: var(--font-mono); }
 /* 每日掉落柱状图（稀有度堆叠 + 金银铜 + 自定义 tooltip） */
 .drop-chart-section { padding: 14px 16px; }
-.drop-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.drop-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .drop-chart-title { margin-bottom: 0; }
 .drop-range-btns { display: flex; gap: 4px; flex: none; }
 .drop-range-btn { padding: 3px 9px; font-size: 12px; font-weight: 600; font-family: var(--font-mono); color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
@@ -1670,8 +1672,8 @@ body.no-token .layout > main { display: none !important; }
 .md-rank-row:nth-child(3) .md-rank-no { color: var(--medal-bronze); }
 
 /* 两栏(大屏):价格 ‖ 玩家 */
-.md-two-col { display: grid; gap: 16px; }
-@media (min-width: 1100px) { .md-two-col { grid-template-columns: 1fr 1fr; } }
+.md-two-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 1100px) { .md-two-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
 /* 量价图柱/线(T7 用) */
 .md-chart-bars-vp { position: relative; height: 120px; display: flex; align-items: flex-end; gap: 2px; }
@@ -1840,6 +1842,12 @@ body.no-token .layout > main { display: none !important; }
 .menu-toggle { display: none; }      /* hamburger：桌面隐藏 */
 .drawer-mask { display: none; }      /* 遮罩：桌面隐藏 */
 
+/* 移动端统计卡片折叠头（交易/挂单/持有；桌面隐藏，移动端由下方 @media 的 :has 控制显示） */
+.stats-fold-head { display: none; width: 100%; align-items: center; gap: 6px; padding: 9px 12px; margin: 0 0 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; user-select: none; }
+.stats-fold-head .sf-ico { font-size: 14px; }
+.stats-fold-head .sf-caret { margin-left: auto; flex: none; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--muted); transition: transform 0.18s; }
+.stats-fold-head:has(+ .trade-stats.unfolded) .sf-caret { transform: rotate(180deg); }
+
 @media (max-width: 768px) {
   /* hamburger 按钮：移动端显示 */
   .menu-toggle {
@@ -1847,8 +1855,7 @@ body.no-token .layout > main { display: none !important; }
     background: none; border: 0; color: var(--text, #e6e8eb); font-size: 22px;
     width: 40px; height: 40px; cursor: pointer; padding: 0; flex: none;
   }
-  /* 去掉底部 tab 栏（改用抽屉） */
-  .mobile-tabs { display: none !important; }
+  /* 底部 tab 栏 HTML 已移除（导航改用抽屉里的 .my-trades-btn） */
   /* sidebar：左侧 off-canvas 抽屉（含资料卡/预算/令牌/数据管理/导航）*/
   .sidebar {
     position: fixed; top: 0; left: 0; bottom: 0; width: 86%; max-width: 320px;
@@ -1865,9 +1872,20 @@ body.no-token .layout > main { display: none !important; }
   .drawer-mask.open { opacity: 1; pointer-events: auto; }
   /* 主区单列；缩 layout 左右内边距（桌面 28px 在移动太宽，挤压卡片列数）*/
   .layout { grid-template-columns: 1fr !important; padding: 0 12px 16px; gap: 0; }
-  .main { padding: 0; }
+  .main { padding: 0; overflow-x: hidden; }  /* overflow-y:auto 会把 overflow-x 强制为 auto，这里显式 hidden 防横向滚动 */
+  .main-toolbar { margin-left: 0; margin-right: 0; }  /* 去掉负 margin：移动端 main 无左右 padding，-6px 会撑出 6px 横向滚动 */
   /* 卡片网格密集：大屏手机 3 列 / 小屏 2 列；缩标签防窄卡片拥挤 */
   .grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) !important; gap: 8px; }
   .rarity-badge { font-size: 10px; padding: 3px 7px; top: 5px; left: 5px; }
   .title-tag { font-size: 10px; padding: 3px 7px; bottom: 5px; right: 5px; max-width: calc(100% - 10px); }
+  /* 交易/挂单/持有 顶部统计卡片默认折叠；仅有数据（inline style 不含 none）时显示折叠头，点击展开 */
+  .stats-fold-head:has(+ .trade-stats:not([style*="none"])) { display: flex; }
+  .trade-stats { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
+  .trade-stats.unfolded { max-height: 1200px; }
+  /* 市场/交易/挂单 卡片价格后的「魔力」单位移动端隐藏（持有 view 保留单位）*/
+  body[data-view="market"] .unit,
+  body[data-view="trades"] .trade-price-unit,
+  body[data-view="orders"] .trade-price-unit { display: none; }
+  /* 顶部结果摘要限宽，超宽自动换行，避免挤掉右侧「返回市场」按钮 */
+  .result-summary { max-width: 55%; }
 }

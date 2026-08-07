@@ -15,6 +15,7 @@ registerMessages('en', {
 
   // ============ 侧栏面板 (panel.*) ============
   'panel.profile': 'Profile',
+  'panel.statsOverview': 'Stats overview',
   'panel.viewTrades': 'View trade history',
   'panel.viewOrders': 'View open orders',
   'panel.tradeHistory': 'Trades',
@@ -353,6 +354,7 @@ registerMessages('en', {
   'dropStats.title': 'Drop Statistics',
   'dropStats.empty': 'No drop data yet; auto-collected on first panel open each day',
   'dropStats.perDay': '{n}/day',
+  'dropStats.feedNote': 'The official API currently returns only the latest 25 drop records',
   'dropStats.spanDays': 'Span',
   'dropStats.dropDays': 'Drop Days',
   'dropStats.maxStreak': 'Max Streak',

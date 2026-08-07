@@ -1,0 +1,25 @@
+# MCard —— M-TEAM 卡片市场助手（自托管）
+#
+# 启动：  docker compose up -d --build
+# 访问：  http://localhost:31414  或  http://<本机局域网IP>:31414
+# 停止：  docker compose down     （数据保留在 ./data）
+
+services:
+  mcard:
+    build:
+      context: .
+      network: host            # 用宿主网络 build，使下方 127.0.0.1 代理可达
+      args:
+        HTTP_PROXY: http://127.0.0.1:7890    # 仅 build 阶段（apt 装编译链 / npm 拉包）走代理
+        HTTPS_PROXY: http://127.0.0.1:7890   # 这是 Docker 预定义 ARG，不会进入运行时环境
+    image: mcard-server:latest
+    container_name: mcard
+    ports:
+      - "31414:31414"        # 宿主端口:容器端口（改左侧即可换端口，如 8080:31414）
+    volumes:
+      - ./data:/app/data      # 持久化 SQLite：API Key + 缓存数据，删容器不丢配置
+    environment:
+      HOST: "0.0.0.0"         # 监听所有网卡，便于局域网 / 移动端访问
+      PORT: "31414"           # 运行时不设 HTTP_PROXY → 容器直连 M-TEAM，不走代理
+      AUTH_PASSWORD: "adminadmin"  # 访问密码：留空=不启用鉴权；填入密码则所有访问需登录（见 README「访问鉴权」）
+    restart: unless-stopped

@@ -1,5 +1,5 @@
 // src/state.js
-import { RARITIES, DROP_SINCE_DEFAULT, deepMerge, isPlainObj } from './lib/shared.js';
+import { RARITIES, deepMerge, isPlainObj } from './lib/shared.js';
 
 const DEFAULT_STATE = {
   config: {
@@ -29,7 +29,7 @@ const DEFAULT_STATE = {
   ordersAll: [],
   ordersTotal: 0,
   dropStats: {
-    since: DROP_SINCE_DEFAULT, lastMsgDate: '', messages: [], feedCards: [], lastFeedAt: 0, summary: null,
+    since: '', lastMsgDate: '', messages: [], feedCards: [], lastFeedAt: 0, summary: null,
   },
   bonus: null,
   cardLogs: [],

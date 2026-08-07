@@ -11,6 +11,8 @@ import * as normalizers from './lib/normalizers.js';
 import * as stats from './lib/stats.js';
 import { createApiRouter } from './routes/api.js';
 import { createSseRouter } from './routes/sse.js';
+import { requireAuth } from './lib/auth.js';
+import { createAuthRouter } from './routes/auth.js';
 
 function todayStr() {
   const d = new Date();
@@ -25,8 +27,12 @@ function createStoreState(store) {
       const st = state.getState();
       const patch = {};
       const ds = st.dropStats;
-      if (ds && Array.isArray(ds.messages) && ds.messages.length) {
-        patch.dropStats = Object.assign({}, ds, { summary: stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, todayStr()) });
+      if (ds && Array.isArray(ds.feedCards) && ds.feedCards.length) {
+        // since 取数据最早一条（官方 feed 仅最新 25 条，起点随数据而定；对齐 mergeDropFeed）
+        let earliest = '';
+        for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+        const since = earliest || ds.since || '';
+        patch.dropStats = Object.assign({}, ds, { since: since, summary: stats.computeDropSummary(ds.messages, ds.feedCards, since, todayStr()) });
       }
       if (Array.isArray(st.cardLogs) && st.cardLogs.length) {
         patch.cardLogSummary = stats.computeCardLogSummary(st.cardLogs);
@@ -60,7 +66,17 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
   const app = express();
   app.use(express.json());
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.use(express.static(path.join(import.meta.dirname, '../public')));
+
+  // 访问鉴权（设 AUTH_PASSWORD env 启用；未设则完全开放，向后兼容）
+  const authPassword = process.env.AUTH_PASSWORD || '';
+  const publicDir = path.join(import.meta.dirname, '../public');
+  if (authPassword) {
+    app.use(createAuthRouter({ password: authPassword, publicDir }));  // /login + /api/login + /api/logout
+    app.use(requireAuth({ password: authPassword }));                   // 保护后续路由（白名单放行登录相关）
+    console.log('[mcard] auth enabled (AUTH_PASSWORD set)');
+  }
+
+  app.use(express.static(publicDir));
   app.use(createApiRouter({ state, collector, trader, mteam }));
   app.use(createSseRouter({ state }));
 

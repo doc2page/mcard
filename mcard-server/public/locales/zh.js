@@ -20,6 +20,7 @@ registerMessages('zh', {
 
   // ============ 侧栏面板 (panel.*) ============
   'panel.profile': '资料卡',
+  'panel.statsOverview': '数据概览',
   'panel.viewTrades': '查看交易记录',
   'panel.viewOrders': '查看当前挂单',
   'panel.tradeHistory': '交易记录',
@@ -358,6 +359,7 @@ registerMessages('zh', {
   'dropStats.title': '掉落统计',
   'dropStats.empty': '暂无掉落数据，每日首次打开面板自动采集',
   'dropStats.perDay': '{n} 张/天',
+  'dropStats.feedNote': '官方接口目前仅返回最新的 25 条掉卡记录',
   'dropStats.spanDays': '总历时',
   'dropStats.dropDays': '掉落天数',
   'dropStats.maxStreak': '最大连续',

@@ -481,6 +481,12 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       added++;
     }
     if (added) ds.feedCards.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
+    // since 取数据中最早一条的掉卡时间（官方 feed 仅返回最新 25 条，起点随实际数据而定，不再固定 7/1）
+    if (ds.feedCards.length) {
+      let earliest = '';
+      for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+      if (earliest) ds.since = earliest;
+    }
     ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
     await state.update({ dropStats: ds });
     console.log('[mcard] drop merged (feed), +' + added + ', total feedCards', ds.feedCards.length);
@@ -498,6 +504,8 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         const cur = await state.getState();
         await state.update({ dropStats: Object.assign({}, cur.dropStats || {}, { lastFeedAt: Date.now() }) });
       } catch (e) { console.warn('[mcard] drop feed failed', e); out.ok = false; out.reason = String(e && e.message || e); }
+      // 魔力符券开卡记录（/api/credit/logs，需 profile.id）；profile 未就绪时内部自动跳过
+      try { await ensureCardLogs(true); } catch (e) { console.warn('[mcard] cardLogs in dropStats failed', e); }
       finally { _dropPromise = null; }
       return out;
     })();
