@@ -545,6 +545,8 @@ button.stat.active .stat-val { color: var(--accent); }
 .chip.inv-title { --rc: var(--accent); }
 .chip.inv-title.tt-1, .chip.inv-title.tt-2, .chip.inv-title.tt-3 { --rc: #7e8694; }
 .chip.inv-title.tt-4 { --rc: #9b8cff; }
+.chip.inv-src-drop { --rc: var(--up); }
+.chip.inv-src-crafted { --rc: var(--accent-2); }
 .chip input { position: absolute; opacity: 0; pointer-events: none; }
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; background: var(--rc); transition: all 0.15s; }
@@ -811,6 +813,8 @@ button.stat.active .stat-val { color: var(--accent); }
 .dist-tag.r-R    { color: var(--r-R);    border-color: color-mix(in srgb, var(--r-R) 35%, transparent); background: color-mix(in srgb, var(--r-R) 10%, transparent); }
 .dist-tag.r-N    { color: var(--r-N);    border-color: color-mix(in srgb, var(--r-N) 40%, transparent); background: color-mix(in srgb, var(--r-N) 12%, transparent); }
 .dist-tag.r-mech { color: var(--r-mech); border-color: color-mix(in srgb, var(--r-mech) 35%, transparent); background: color-mix(in srgb, var(--r-mech) 10%, transparent); }
+.dist-tag.inv-src-drop { color: var(--up); border-color: color-mix(in srgb, var(--up) 35%, transparent); background: color-mix(in srgb, var(--up) 10%, transparent); }
+.dist-tag.inv-src-crafted { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 35%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
 .ts-link {
   color: var(--accent); cursor: pointer; font-weight: 700;
   text-decoration: underline; text-underline-offset: 2px;
@@ -1903,4 +1907,6 @@ body.no-token .layout > main { display: none !important; }
   /* 筛选 chips：一类一行（分组标签/显示锁定各占整行，其下 chips 另起行；交易/挂单/持有共用）*/
   .trades-search .chips .chip-group-label { flex: 1 0 100%; margin-left: 0; }
   .trades-search .chips .inv-lock-toggle { margin-top: 8px; }  /* 「显示锁定」与上方 chips 拉开间距 */
+  /* 市场数据/市场筛选条：移动端每行一类（对齐 .trades-search 做法：label 占整行，chips 跟随）*/
+  .market-filter .mf-row .chip-group-label { flex: 1 0 100%; margin-left: 0; }
 }

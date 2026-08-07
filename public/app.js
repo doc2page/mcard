@@ -39,6 +39,8 @@ function roleFullLabel(role) {
 function mechLabel(type) { return t('mech.' + type) || MECH_LABEL[type] || type; }
 // 机制卡类型 → 配色类（魔力符券=r-N / 置顶免费符=r-SR / VIP七日符=r-SSR；区别于机制卡通用紫 r-mech）
 function mechColorClass(type) { return type === 'mana_voucher' ? 'r-N' : type === 'single_free' ? 'r-SR' : type === 'vip_7d' ? 'r-SSR' : 'r-mech'; }
+// 来源配色：机制卡走 mechColorClass（稀有度色），掉落(real)/制造(forged) 用 inv-src-（与持有 dist-tag/chip 统一）
+function provColorClass(p) { return p === 'real' ? 'inv-src-drop' : p === 'forged' ? 'inv-src-crafted' : mechColorClass(p); }
 // label 存 i18n key（不预翻译），renderConfig 渲染时实时 t() 翻译。
 // 否则顶层固化后，切语言虽会重建按钮（setLang→renderAll→renderConfig），读到的仍是旧语言文本 → stale。
 const MODES = [
@@ -1415,18 +1417,18 @@ function renderInventoryStats() {
   // 在挂卖单：挂单中的卖出卡所有权仍属用户，计入总持有
   const openSell = ((state && state.ordersAll) || []).filter((o) => o.status === 'open' && o.side === 'sell').length;
   const total = all.length + openSell;
-  // 稀有度分布（含机制卡）
+  // 稀有度分布
   const rarityTags = document.createDocumentFragment();
   let hasRarity = false;
   RARITIES.forEach((r) => {
     if (rarityDist[r]) { rarityTags.appendChild(el('span', { cls: 'dist-tag r-' + r, text: r + '×' + rarityDist[r] })); hasRarity = true; }
   });
-  if (mechCount) { rarityTags.appendChild(el('span', { cls: 'dist-tag r-mech', text: t('dist.mechPrefix', { n: mechCount }) })); hasRarity = true; }
-  // 来源分布（按 serial：掉落 / 制造）
+  // 来源分布（机制卡 + 掉落 / 制造）
   const provTags = document.createDocumentFragment();
   let hasProv = false;
-  if (dropCount) { provTags.appendChild(el('span', { cls: 'dist-tag', text: t('inv.drop') + '×' + dropCount })); hasProv = true; }
-  if (craftedCount) { provTags.appendChild(el('span', { cls: 'dist-tag', text: t('inv.crafted') + '×' + craftedCount })); hasProv = true; }
+  if (mechCount) { provTags.appendChild(el('span', { cls: 'dist-tag r-mech', text: t('dist.mechPrefix', { n: mechCount }) })); hasProv = true; }
+  if (dropCount) { provTags.appendChild(el('span', { cls: 'dist-tag inv-src-drop', text: t('inv.drop') + '×' + dropCount })); hasProv = true; }
+  if (craftedCount) { provTags.appendChild(el('span', { cls: 'dist-tag inv-src-crafted', text: t('inv.crafted') + '×' + craftedCount })); hasProv = true; }
   box.style.display = '';
   box.replaceChildren();
   // 已使用（销毁）机制卡
@@ -2052,8 +2054,8 @@ function buildTradeFilter(hist, matchCount, total) {
   // 稀有度/来源/称号 一行
   const chipsRow = el('div', { cls: 'mf-row' });
   chipsRow.appendChild(chipGroup('marketData.filterRarity', rarities, 'rarities', function (v) { return 'r-' + v; }));
-  if (facets.provenances.length > 1) chipsRow.appendChild(chipGroup('marketData.filterProv', facets.provenances, 'provenances', null, provLabel));
-  if (facets.titles.length > 1) chipsRow.appendChild(chipGroup('marketData.filterTitle', facets.titles, 'titles'));
+  if (facets.provenances.length > 1) chipsRow.appendChild(chipGroup('marketData.filterProv', facets.provenances, 'provenances', provColorClass, provLabel));
+  if (facets.titles.length > 1) chipsRow.appendChild(chipGroup('marketData.filterTitle', facets.titles, 'titles', function (v) { return 'inv-title ' + (TITLE_TIER[v] || 'tt-5'); }));
   wrap.appendChild(chipsRow);
   // 日期行
   const drow = el('div', { cls: 'mf-row' });
@@ -2292,8 +2294,8 @@ function buildMarketFilter(hist, sum) {
   // 稀有度/来源/称号 一行（flex-wrap：放得下一行，放不下换行）
   const chipsRow = el('div', { cls: 'mf-row' });
   chipsRow.appendChild(chipGroup('marketData.filterRarity', rarities, 'rarities', function (v) { return 'r-' + v; }));
-  if (facets.provenances.length > 1) chipsRow.appendChild(chipGroup('marketData.filterProv', facets.provenances, 'provenances', null, provLabel));
-  if (facets.titles.length > 1) chipsRow.appendChild(chipGroup('marketData.filterTitle', facets.titles, 'titles'));
+  if (facets.provenances.length > 1) chipsRow.appendChild(chipGroup('marketData.filterProv', facets.provenances, 'provenances', provColorClass, provLabel));
+  if (facets.titles.length > 1) chipsRow.appendChild(chipGroup('marketData.filterTitle', facets.titles, 'titles', function (v) { return 'inv-title ' + (TITLE_TIER[v] || 'tt-5'); }));
   wrap.appendChild(chipsRow);
   const drow = el('div', { cls: 'mf-row' });
   drow.appendChild(el('span', { cls: 'chip-group-label', text: t('marketData.filterDate') }));
@@ -3880,9 +3882,10 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
       renderFn();
     }));
   });
+  // 来源组：机制卡（所有 view）+ 掉落/制造（持有 withSource）
+  groupLabel(t('inv.metricSource'));
   box.appendChild(mkChip('r-mech' + (filterObj.mech ? ' on' : ''), t('cfg.mech'), () => { filterObj.mech = !filterObj.mech; renderFn(); }));
   if (withSource) {
-    groupLabel(t('inv.metricSource'));
     [['drop', t('inv.drop')], ['crafted', t('inv.crafted')]].forEach(([key, lbl]) => {
       const on = filterObj.source.has(key);
       box.appendChild(mkChip('inv-src-' + key + (on ? ' on' : ''), lbl, () => {
