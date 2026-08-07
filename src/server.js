@@ -22,6 +22,8 @@ function todayStr() {
 // 启动重算 dropStats/cardLog summary（对齐 background.js:79-91 的启动逻辑）
 function createStoreState(store) {
   const state = createState({ store });
+  // 运行锁是进程内瞬时态，绝不跨重启保留——上次崩溃残留的 isRoundRunning:true 会持久化进 db，重启后让 triggerRefreshRound 永远走 queued 分支、市场采集再也不触发
+  state.update({ isRoundRunning: false, round: null });
   (async () => {
     try {
       const st = state.getState();

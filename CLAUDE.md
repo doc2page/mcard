@@ -24,6 +24,7 @@ npm test                              # node --test tests/**/*.test.js
 - **鉴权**：`AUTH_PASSWORD` env（设了启用无状态 HMAC token 登录，全站 `requireAuth` 中间件 + 独立 `login.html`，cookie 30 天；密码走 `.env` gitignore 不入库；不设=完全开放）。与 API key 独立（API key 管 M-TEAM 访问）。
 - **代理**：build 走代理（`docker-compose.yml` 的 `build.args` `127.0.0.1:7890` + `network: host`），运行时 `environment` **无代理变量**，容器直连 M-TEAM。
 - **手动触发**：所有采集/交易由页面手动点击触发，无后台轮询（反风控）。冷却：market 8s / trades·orders·marketData 8s / cardLog·inventory 30s + `isRoundRunning` 锁 + randSleep 400-900ms。
+- **运行锁勿跨重启持久化**：`isRoundRunning` 是进程内瞬时态——启动时 `server.js` 的 `createStoreState` 强制重置为 false、`round=null`；`collector.js` 的 `startRound` 用 try/finally 兜底 `onRoundDone`（解锁）。否则一次采集崩溃会让锁卡 true 进 db，重启后 `triggerRefreshRound` 永远走 `queued` 分支、市场采集再也不触发（症状：市场卡片停旧快照，但行情/持有/挂单/掉落照常刷新）。
 - **since 两套别混**：掉落统计 since = 官方最新 25 条数据的最早时间（动态）；**用户画像消费维度**用固定 7/1（`PORTRAIT_SPAN_SINCE` 常量，app.js 顶部；前端没加载 dropStats.js，不能直接用其 `DROP_SINCE_DEFAULT`）。
 - **设置存后端**：lockedCards 在 config；仅 theme/privacy 留前端 localStorage。
 - **不主动 Playwright 验证**：改完 rebuild + restart 后直接交用户验证，别主动开 Playwright 截图/测量。

@@ -36,3 +36,18 @@ test('triggerRefreshRound manual 节流 8s', async () => {
   const r = await col.triggerRefreshRound('manual');
   assert.equal(r.throttled, true);
 });
+
+test('startRound 循环中途抛错仍解锁 isRoundRunning（finally 兜底）', async () => {
+  // 复现根因：循环内、内层 try 外的代码（state.update/randSleep）抛错时，旧版 onRoundDone 永不执行 → 锁卡死
+  const d = deps(fakeMteam([{ filmName: '卡', lowestAsk: 10, variant: {} }]));
+  const col = createCollector(d);
+  const realUpdate = d.state.update.bind(d.state);
+  let n = 0;
+  d.state.update = async (patch) => {
+    n += 1;
+    if (n === 3) throw new Error('boom');  // 第 3 次 update = 循环首轮 currentRarity 更新（内层 try 外）
+    return realUpdate(patch);
+  };
+  await assert.rejects(col.startRound(await d.state.getState(), 'refresh', ['UR', 'SSR'], 10), /boom/);
+  assert.equal(d.state.getState().isRoundRunning, false, '抛错后 isRoundRunning 必须被 finally 复位');
+});

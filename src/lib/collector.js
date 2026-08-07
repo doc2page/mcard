@@ -88,25 +88,29 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     const round = { rarities, startedAt: Date.now(), done: false, reason };
     await state.update({ round });
     let hits = 0, misses = 0, authFailed = false;
-    for (const rarity of rarities) {
-      await state.update({ round: Object.assign({}, round, { currentRarity: rarity }) });
-      try {
-        const resp = await fetchMarketList(rarity, pageSize);
-        if (resp && resp.code === '0' && resp.data && Array.isArray(resp.data.data)) {
-          await applyMarketRarity(rarity, resp.data.data, Date.now());
-          hits++;
-        } else { misses++; }
-      } catch (e) {
-        misses++;
-        if (e && e.message === 'API_KEY_INVALID') { authFailed = true; break; }
+    try {
+      for (const rarity of rarities) {
+        await state.update({ round: Object.assign({}, round, { currentRarity: rarity }) });
+        try {
+          const resp = await fetchMarketList(rarity, pageSize);
+          if (resp && resp.code === '0' && resp.data && Array.isArray(resp.data.data)) {
+            await applyMarketRarity(rarity, resp.data.data, Date.now());
+            hits++;
+          } else { misses++; }
+        } catch (e) {
+          misses++;
+          if (e && e.message === 'API_KEY_INVALID') { authFailed = true; break; }
+        }
+        await randSleep(400, 900);
       }
-      await randSleep(400, 900);
+      if (!authFailed) {
+        try { await fetchProfile(); } catch (e) {}
+        try { await fetchMyBonus(); } catch (e) {}
+      }
+    } finally {
+      // 兜底解锁：循环中途若抛错（state.update/randSleep 等旧版位于内层 try 外，一旦崩则 onRoundDone 永不执行、锁永久卡住），finally 确保仍解锁
+      await onRoundDone({ hits, misses, authFailed });
     }
-    if (!authFailed) {
-      try { await fetchProfile(); } catch (e) {}
-      try { await fetchMyBonus(); } catch (e) {}
-    }
-    await onRoundDone({ hits, misses, authFailed });
   }
 
   async function triggerRefreshRound(source, onlyRarities) {
