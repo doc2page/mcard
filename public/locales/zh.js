@@ -386,7 +386,7 @@ registerMessages('zh', {
   'dropStats.importReason.empty': '请先粘贴数据',
   'dropStats.importHint': '掉落数据不完整，可手动补全：',
   'dropStats.importPaging': '⚠ 检测到共 {pages} 页（{total} 条），当前第 {page} 页；请翻到下一页重复操作以补全全部',
-  'dropStats.importIncomplete': '⚠ 当前最早记录为 {date}，可能仍有更早的数据未导入',
+  'dropStats.importIncomplete': '⚠ 已导入 {have}/{total} 条，可能还有未导入的页',
   // ============ 市场数据 view (marketData.*) ============
   'panel.marketData': '市场数据',
   'panel.viewMarketData': '查看市场数据',

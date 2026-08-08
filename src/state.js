@@ -29,7 +29,7 @@ const DEFAULT_STATE = {
   ordersAll: [],
   ordersTotal: 0,
   dropStats: {
-    since: '', lastMsgDate: '', messages: [], feedCards: [], lastFeedAt: 0, summary: null,
+    since: '', lastMsgDate: '', messages: [], feedCards: [], lastFeedAt: 0, summary: null, msgTotal: 0,
   },
   bonus: null,
   cardLogs: [],

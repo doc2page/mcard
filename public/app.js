@@ -59,7 +59,6 @@ const BUY_FAIL_REASON = {
 };
 let state = null;
 const PORTRAIT_SPAN_SINCE = '2026-07-01 00:00:00';  // 用户画像消费维度统计起点（固定 7/1，与掉落统计动态 since 无关）
-const DROP_FULL_SINCE = '2026-07-01';  // 掉落数据完整起点（卡片系统 7/1 上线）；rangeStart 非此值说明历史未补全，显示「手动补全」入口
 let view = 'market'; // 卡片区视图：'market'(市场卡牌) | 'trades'(购买记录) | 'orders'(当前挂单)
 let ordersSortDir = 'desc';  // 当前挂单排序：'desc'(最新在上) | 'asc'(最早在上)
 let invSortDir = 'desc';     // 持有卡片排序
@@ -1506,8 +1505,10 @@ function renderDropStats() {
   );
   // 数据实际范围（since 随最新 25 条数据而定，不再固定 7/1）+ 接口限制说明
   if (sum.rangeStart && sum.rangeEnd) hero.appendChild(el('div', { cls: 'drop-hero-range', text: sum.rangeStart + ' ~ ' + sum.rangeEnd }));
-  // 「官方接口仅25条」+「可手动补全」+ 按钮合并显示，仅数据未补全（最早非 7/1）时；补全后整体隐藏
-  if (sum.rangeStart && sum.rangeStart !== DROP_FULL_SINCE) {
+  // 「官方接口仅25条」+「可手动补全」+ 按钮合并显示，仅 message 接口数据未补全时（msgTotal=0 从未导入，或已导入条数 < 接口总数）；补全后整体隐藏
+  const _msgTotal = (state.dropStats && state.dropStats.msgTotal) || 0;
+  const _needImport = !_msgTotal || (((state.dropStats && state.dropStats.messages) || []).length < _msgTotal);
+  if (_needImport) {
     const cta = el('div', { cls: 'drop-hero-cta' });
     const ctaBtn = el('button', { cls: 'seg-btn mini', text: '📥 ' + t('dropStats.importBtn'), attrs: { type: 'button' } });
     ctaBtn.onclick = openDropImportModal;
@@ -1633,8 +1634,7 @@ function openDropImportModal() {
         if (r.imported > 0) ta.value = '';
         const parts = [t('dropStats.importResult', { n: r.imported, skip: r.skipped, total: r.total })];
         if (r.page && r.page.totalPages > 1) parts.push(t('dropStats.importPaging', { pages: r.page.totalPages, page: r.page.pageNumber || 1, total: r.page.total }));
-        const rs = state && state.dropStats && state.dropStats.summary && state.dropStats.summary.rangeStart;
-        if (rs && rs !== DROP_FULL_SINCE) parts.push(t('dropStats.importIncomplete', { date: rs }));
+        if (r.page && r.page.total && r.total < r.page.total) parts.push(t('dropStats.importIncomplete', { have: r.total, total: r.page.total }));
         result.textContent = parts.join('\n');
         result.className = 'drop-import-result ' + (r.imported > 0 ? 'ok' : 'info');
       } else {

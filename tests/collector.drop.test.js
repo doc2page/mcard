@@ -132,11 +132,13 @@ test('导入 messages 剔除 feedCards 重叠（避免双源重复计算）', as
 });
 
 test('importDropMessages 返回分页信息（提示翻页）', async () => {
-  const col = createCollector(deps(_dropMt));
+  const d = deps(_dropMt);
+  const col = createCollector(d);
   const json = JSON.stringify({ data: { pageNumber: '1', pageSize: '100', total: '31', totalPages: '2', data: [
     { id: 'm1', createdDate: '2026-07-01 00:00:00', context: '1. N《A》『SPARK』' },
   ] } });
   const r = await col.importDropMessages(json);
   assert.equal(r.ok, true);
   assert.deepEqual(r.page, { totalPages: 2, total: 31, pageNumber: 1, pageSize: 100 });
+  assert.equal(d.state.getState().dropStats.msgTotal, 31);  // 接口总条数记录，供 CTA 判断补全
 });

@@ -380,7 +380,7 @@ registerMessages('en', {
   'dropStats.importReason.empty': 'Please paste data first',
   'dropStats.importHint': 'Drop data incomplete — you can backfill it manually:',
   'dropStats.importPaging': '⚠ {total} records across {pages} pages detected; you imported page {page}. Repeat for the remaining pages.',
-  'dropStats.importIncomplete': '⚠ Earliest record is {date}; earlier data may still be missing.',
+  'dropStats.importIncomplete': '⚠ Imported {have}/{total} records; some pages may be missing.',
   'dropStats.rangeAll': 'All',
   // ============ Market data view (marketData.*) ============
   'panel.marketData': 'Market',

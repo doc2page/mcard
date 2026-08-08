@@ -540,6 +540,10 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       existIds.add(id);
       imported++;
     }
+    // msgTotal = message 接口总条数（响应头部每次都带，无论本次是否新增）——即使全重复也记录，供前端判断补全（老用户首导或重导同样数据都能补上 msgTotal）
+    const newMsgTotal = (parsed.page && parsed.page.total) || 0;
+    const msgTotalChanged = newMsgTotal && newMsgTotal !== (ds.msgTotal || 0);
+    if (newMsgTotal) ds.msgTotal = newMsgTotal;
     if (imported) {
       ds.messages.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
       ds.lastMsgDate = ds.messages[0].createdDate;  // feed 游标 = messages 最新，只补其后，不与导入历史重叠
@@ -549,9 +553,9 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
       if (earliest) ds.since = earliest;
       ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
-      await state.update({ dropStats: ds });
       console.log('[mcard] drop imported (messages), +' + imported + ', total messages', ds.messages.length);
     }
+    if (imported || msgTotalChanged) await state.update({ dropStats: ds });
     return { ok: true, imported: imported, skipped: skipped, total: ds.messages.length, page: parsed.page || null };
   }
 
