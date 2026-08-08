@@ -50,7 +50,3 @@ npm test                              # node --test tests/**/*.test.js
 ## 文档
 
 `README.md`（中）+ `README.en.md`（英），互相链接。仓库 2026-08-07 整理：原 `mcard-server/` 子目录移到根（52 文件 rename 保历史），`mcard-main`/`docs`/截图已删。
-
-## CLAUDE.md 维护
-
-Claude **自主判断**更新本文件：发现新的长期约定 / 架构规则 / 踩坑（影响频率、检测风险、隐蔽性、数据正确性）时，主动追加到对应小节，不必等用户指示。临时进度（当前任务 / 下一步 / 未决）仍走 `HANDOFF.md`，勿混（分工见全局 CLAUDE.md「会话交接机制」）。
