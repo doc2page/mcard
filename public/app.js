@@ -2498,23 +2498,31 @@ function buildMarketChart(sum) {
     });
     append(wrap, tip, bars, axis);
   } else if (mdChartSeries === 'dist') {
-    // 价格分布（6 桶对数直方图）：.md-chart-bars-vp，无时间窗，margin-top 给 tip 让位
+    // 价格分布（6 桶对数直方图）：标注每桶价格区间，X 轴用 fmtK 紧凑下界，tooltip 显示完整区间 + 占比
     const buckets = sum.priceHistogram || [];
-    const labels = buckets.map(function (b, i) { return '#' + (i + 1); });
-    const values = buckets.map(function (b) { return (b && b.count) || 0; });
+    const total = buckets.reduce(function (s, b) { return s + ((b && b.count) || 0); }, 0) || 1;
     let max = 0;
-    for (let i = 0; i < values.length; i++) if (values[i] > max) max = values[i];
-    const step = Math.max(1, Math.ceil(labels.length / 6));
+    for (let i = 0; i < buckets.length; i++) { const c = (buckets[i] && buckets[i].count) || 0; if (c > max) max = c; }
+    const step = Math.max(1, Math.ceil(buckets.length / 6));
     const bars = el('div', { cls: 'md-chart-bars-vp', attrs: { style: 'margin-top:30px' } });
-    labels.forEach(function (lab, i) {
-      const v = values[i] || 0;
-      const bar = el('div', { cls: 'md-chart-bar-vp' });
+    buckets.forEach(function (b, i) {
+      const v = (b && b.count) || 0;
+      const bar = el('div', { cls: 'md-chart-bar-vp' + (v > 0 ? '' : ' zero') });
       if (v > 0 && max > 0) bar.style.height = (v / max * 100) + '%';
-      bar.onmouseenter = function () { bars.classList.add('hovering'); bar.classList.add('hover'); tip.replaceChildren(el('span', { cls: 'dct-date', text: t('marketData.seriesDist') + ' ' + lab }), el('span', { cls: 'dct-total', text: String(v) })); tip.classList.add('show'); };
+      const range = b ? (fmtPrice(b.lo) + ' – ' + fmtPrice(b.hi)) : '';
+      const pct = Math.round(v / total * 100);
+      bar.onmouseenter = function () {
+        bars.classList.add('hovering'); bar.classList.add('hover');
+        tip.replaceChildren(
+          el('span', { cls: 'dct-date', text: range }),
+          el('span', { cls: 'dct-total', text: v + ' ' + t('common.unitTrades') + ' · ' + pct + '%' })
+        );
+        tip.classList.add('show');
+      };
       bar.onmouseleave = function () { bars.classList.remove('hovering'); bar.classList.remove('hover'); tip.classList.remove('show'); };
       bars.appendChild(bar);
       const slot = el('div', { cls: 'drop-chart-axis-slot' });
-      if (i % step === 0 || i === labels.length - 1) slot.textContent = lab;
+      if (i % step === 0 || i === buckets.length - 1) slot.textContent = b ? fmtK(b.lo) : '';
       axis.appendChild(slot);
     });
     append(wrap, tip, bars, axis);

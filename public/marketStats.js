@@ -183,7 +183,9 @@ function _priceHistogram(prices) {
   const lo = Math.floor(Math.log10(prices[0] || 1));
   const hi = Math.ceil(Math.log10(prices[prices.length - 1] || 1));
   const buckets = 6, span = Math.max(1, (hi - lo) || 1), step = span / buckets;
-  const out = Array.from({ length: buckets }, function () { return { count: 0, volume: 0 }; });
+  const out = Array.from({ length: buckets }, function (_, i) {
+    return { count: 0, volume: 0, lo: Math.round(Math.pow(10, lo + i * step)), hi: Math.round(Math.pow(10, lo + (i + 1) * step)) };
+  });
   for (let i = 0; i < prices.length; i++) {
     const p = prices[i];
     if (!(p > 0)) continue; // 防御：跳过非正价格（log10(p≤0)=NaN→bi=NaN→out[NaN] 崩溃）
