@@ -391,6 +391,7 @@ registerMessages('zh', {
   'panel.marketData': '市场数据',
   'panel.viewMarketData': '查看市场数据',
   'marketData.title': '市场数据',
+  'marketData.report': '生成报告',
   'marketData.empty': '暂无成交数据，保存令牌后自动采集',
   'marketData.filterRarity': '稀有度',
   'marketData.filterProv': '来源',

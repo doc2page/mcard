@@ -386,6 +386,7 @@ registerMessages('en', {
   'panel.marketData': 'Market',
   'panel.viewMarketData': 'View market data',
   'marketData.title': 'Market Data',
+  'marketData.report': 'Generate Report',
   'marketData.empty': 'No trade data yet; auto-collected after saving token',
   'marketData.filterRarity': 'Rarity',
   'marketData.filterProv': 'Provenance',

@@ -1180,6 +1180,9 @@ button.stat.active .stat-val { color: var(--accent); }
 .drop-import-bar { text-align: right; margin-bottom: 4px; }
 .drop-hero-cta { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .drop-hero-cta .seg-btn.mini { padding: 4px 12px; font-size: 12px; }
+.md-report-bar { text-align: right; margin: 8px 0 4px; }
+.md-tab.md-report { margin-left: auto; background: #43a047; color: #fff; border-color: #43a047; }
+.md-tab.md-report:hover { background: #388e3c; border-color: #388e3c; color: #fff; }
 .drop-import-steps { margin: 0 0 14px; padding-left: 20px; color: var(--muted); font-size: 12.5px; line-height: 1.75; }
 .drop-import-steps li { margin-bottom: 3px; }
 .drop-import-textarea { width: 100%; min-height: 130px; box-sizing: border-box; resize: vertical; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-3); color: var(--text); }

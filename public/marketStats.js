@@ -431,6 +431,104 @@ function computeMarketSummary(trades, filter, today) {
   );
 }
 
+// ============ 市场报告判读引擎 ============
+// 把 computeMarketSummary 的全量聚合结果 → 4 洞察判读 + 顶端摘要。阈值集中常量，便于按体感调整。
+const MR_THRESH = { trend: 0.15, flow: 1.2, skew: 1.3, cv: [0.5, 1.0], hhi: [1000, 1800], both: [0.2, 0.4], ladder: 1.5 };
+const MR_RARITY_ORDER = ['N', 'R', 'SR', 'SSR', 'UR'];
+function analyzeMarket(sum) {
+  sum = sum || {};
+  // 总历时天数（rangeStart~rangeEnd）
+  let days = 0;
+  if (sum.rangeStart && sum.rangeEnd) {
+    const dms = _mkMs(sum.rangeEnd) - _mkMs(sum.rangeStart);
+    if (Number.isFinite(dms) && dms >= 0) days = Math.floor(dms / 86400000) + 1;
+  }
+  const dailyAvg = days ? sum.totalTrades / days : 0;
+
+  // —— ① 量价诊断（四象限）——
+  const tr = sum.trend;
+  let priceAction;
+  if (!tr) {
+    priceAction = { tier: 'nodata', text: '数据不足 14 天，暂无量价趋势', dailyAvg: dailyAvg };
+  } else {
+    const td = tr.tradeDeltaPct || 0, pd = tr.priceDeltaPct || 0;
+    const up = (x) => x > MR_THRESH.trend, down = (x) => x < -MR_THRESH.trend;
+    let tier, text;
+    if (up(td) && up(pd)) { tier = 'expand'; text = '需求扩张，量价齐升'; }
+    else if (up(td) && down(pd)) { tier = 'sell'; text = '放量下跌，抛压加重'; }
+    else if (down(td) && up(pd)) { tier = 'divergence'; text = '量价背离，有价无市风险'; }
+    else if (down(td) && down(pd)) { tier = 'cool'; text = '量价齐缩，市场冷清'; }
+    else { tier = 'flat'; text = '成交平稳'; }
+    priceAction = { tier: tier, text: text, dailyAvg: dailyAvg, tradeDelta: td, priceDelta: pd };
+  }
+
+  // —— ② 主导结构（GMV 占比 + 集中度）—— 笔数会骗人，用成交额结构看资金真实重心
+  const rm = sum.rarityMatrix || [];
+  let totVol = 0;
+  for (let i = 0; i < rm.length; i++) totVol += (rm[i].volume || 0);
+  const safe = totVol || 1;
+  const sorted = rm.slice().sort((a, b) => (b.volume || 0) - (a.volume || 0));
+  const hhi = (sum.concentration && sum.concentration.hhi) || 0;
+  const structure = {
+    main: sorted[0] ? { rarity: sorted[0].rarity, pct: sorted[0].volume / safe } : null,
+    second: sorted[1] ? { rarity: sorted[1].rarity, pct: sorted[1].volume / safe } : null,
+    matrix: rm,
+    hhi: hhi,
+    hhiTier: hhi < MR_THRESH.hhi[0] ? '分散竞争' : hhi < MR_THRESH.hhi[1] ? '中度集中' : '寡头集中',
+    top10Pct: (sum.concentration && sum.concentration.top10Pct) || 0,
+  };
+
+  // —— ③ 流动性成色（资金流向 + 投机 + 倒卖）—— 买卖三方是资金流向 X 光
+  const ov = sum.overlap || {};
+  const pb = ov.pureBuyerPct || 0, ps = ov.pureSellerPct || 0, bt = ov.bothPct || 0;
+  const flips = sum.flips || [];
+  let flipSum = 0;
+  for (let j = 0; j < flips.length; j++) flipSum += (flips[j].flips || 0);
+  // 倒卖毛利/持有用中位数（抗极端：偶发低价买高价转的 10x 会把均值拉飞）
+  const medOf = function (arr) { const n = arr.length; if (!n) return null; return n % 2 ? arr[(n - 1) / 2] : (arr[n / 2 - 1] + arr[n / 2]) / 2; };
+  const margins = flips.map((f) => f.avgMargin || 0).filter((x) => x).sort((a, b) => a - b);
+  const holds = flips.map((f) => f.avgHoldDays || 0).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  const liquidity = {
+    flow: pb > ps * MR_THRESH.flow ? '净入场（资金流入）' : ps > pb * MR_THRESH.flow ? '净离场（资金流出）' : '买卖均衡',
+    pureBuyerPct: pb, pureSellerPct: ps, bothPct: bt,
+    bothTier: bt > MR_THRESH.both[1] ? '投机偏重' : bt > MR_THRESH.both[0] ? '适中' : '收藏主导',
+    flipCount: flipSum,
+    avgMargin: medOf(margins),
+    avgHoldDays: medOf(holds),
+  };
+
+  // —— ④ 定价合理性（偏态 + 阶梯 + 离散）——
+  const med = sum.medianPrice || 0, avg = sum.avgPrice || 0;
+  const skew = med ? avg / med : 1;
+  const cv = avg ? (sum.priceStd || 0) / avg : 0;
+  const byR = {}; for (let r = 0; r < rm.length; r++) byR[rm[r].rarity] = rm[r].avgPrice || 0;
+  let ladderOk = true;
+  const ladderGaps = [];
+  for (let li = 1; li < MR_RARITY_ORDER.length; li++) {
+    const lo = byR[MR_RARITY_ORDER[li - 1]], hi = byR[MR_RARITY_ORDER[li]];
+    const gap = lo > 0 ? hi / lo : 0;
+    ladderGaps.push({ from: MR_RARITY_ORDER[li - 1], to: MR_RARITY_ORDER[li], gap: gap });
+    if (lo > 0 && hi / lo < MR_THRESH.ladder) ladderOk = false;
+  }
+  const valuation = {
+    median: med, avg: avg, skew: skew,
+    skewTier: skew > MR_THRESH.skew ? '右偏（高价品拉高均价，中位更真实）' : '近对称',
+    p25: sum.priceP25 || 0, p75: sum.priceP75 || 0, p90: sum.priceP90 || 0,
+    cv: cv, cvTier: cv < MR_THRESH.cv[0] ? '共识强' : cv < MR_THRESH.cv[1] ? '一般' : '分歧大',
+    ladderOk: ladderOk, ladderGaps: ladderGaps,
+  };
+
+  // —— 顶端摘要 ——
+  const parts = [];
+  if (sum.rangeStart && sum.rangeEnd) parts.push(sum.rangeStart.slice(0, 10) + ' ~ ' + sum.rangeEnd.slice(0, 10));
+  if (sum.totalTrades) parts.push(sum.totalTrades + ' 笔');
+  if (priceAction.text && priceAction.tier !== 'nodata') parts.push(priceAction.text);
+  if (structure.main) parts.push(structure.main.rarity + ' 主导(' + Math.round(structure.main.pct * 100) + '%)');
+  if (liquidity.flow) parts.push(liquidity.flow);
+  parts.push(structure.hhiTier);
+  return { headline: parts.join(' ｜ '), days: days, dailyAvg: dailyAvg, priceAction: priceAction, structure: structure, liquidity: liquidity, valuation: valuation };
+}
+
 // 从全量提取可选筛选值（不受当前筛选影响，供 chips）
 function extractFacets(trades) {
   const all = Array.isArray(trades) ? trades : [];
@@ -492,5 +590,5 @@ function filterTrades(hist, filter, search, dir) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { computeMarketSummary: computeMarketSummary, extractFacets: extractFacets, tradeDirection: tradeDirection, filterTrades: filterTrades };
+  module.exports = { computeMarketSummary: computeMarketSummary, analyzeMarket: analyzeMarket, extractFacets: extractFacets, tradeDirection: tradeDirection, filterTrades: filterTrades };
 }

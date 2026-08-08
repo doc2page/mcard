@@ -1651,6 +1651,124 @@ function openDropImportModal() {
   setTimeout(function () { try { ta.focus(); } catch (e) {} }, 60);
 }
 
+// ============ 市场分析报告（HTML 单文件，新 tab 打开，可打印）============
+// 全量数据（不受筛选影响）→ computeMarketSummary → analyzeMarket 判读 → 精致研报 HTML（内联 CSS + SVG）。
+function _rptCSS() {
+  return `
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 820px; margin: 0 auto; padding: 26px 22px 44px; color: #222; background: #f4f5f7; line-height: 1.5; }
+.rpt-btn { position: fixed; top: 14px; right: 14px; z-index: 9; padding: 8px 16px; background: #f5a623; color: #fff; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 18px rgba(245,166,35,.45); }
+header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 18px 24px; border-radius: 13px; margin-bottom: 12px; }
+header h1 { margin: 0 0 4px; font-size: 18px; }
+.headline { font-size: 12px; line-height: 1.7; opacity: .94; }
+.meta { font-size: 10.5px; opacity: .55; margin-top: 8px; }
+section { background: #fff; border-radius: 11px; padding: 11px 15px; margin-bottom: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+section h2 { margin: 0 0 2px; font-size: 13px; color: #1a1a2e; }
+.rpt-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rpt-cell { min-width: 0; }
+.rpt-cell h2 { font-size: 12.5px; }
+.rpt-cell .verdict { font-size: 11px; margin: 1px 0 5px; }
+.rpt-cell .metrics { grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 4px 0; }
+.rpt-cell .metric { padding: 4px 5px; }
+.rpt-cell .metric .v { font-size: 12.5px; }
+.rpt-cell .metric .l { font-size: 9px; }
+.verdict { font-size: 12px; color: #c47e00; font-weight: 600; margin: 2px 0 7px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 7px; margin: 7px 0; }
+.metric { background: #f7f8fa; border-radius: 7px; padding: 6px 9px; }
+.metric .v { font-size: 14px; font-weight: 700; color: #1a1a2e; }
+.metric .l { font-size: 10px; color: #888; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #f0f0f2; }
+th { color: #999; font-weight: 600; font-size: 10px; }
+td:first-child { font-weight: 600; }
+.hint { font-size: 10px; color: #aaa; margin: 5px 0 2px; }
+.rc-bars { display: flex; align-items: stretch; gap: 3px; }
+.rc-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.rc-plot { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.rc-bar { width: 80%; min-height: 1px; border-radius: 2px 2px 0 0; background: #f5a623; position: relative; }
+.rc-val { position: absolute; top: -13px; left: 0; right: 0; text-align: center; font-size: 9px; color: #666; }
+.rc-lab { font-size: 9px; color: #999; text-align: center; margin-top: 3px; height: 11px; overflow: hidden; }
+.rc-N{background:#9e9e9e}.rc-R{background:#66bb6a}.rc-SR{background:#42a5f5}.rc-SSR{background:#ab47bc}.rc-UR{background:#ff7043}
+footer { text-align: center; font-size: 10px; color: #bbb; margin: 10px 0 0; }
+@page { margin: 0; }
+@media print {
+  body { background: #fff; padding: 10mm 12mm; max-width: none; }
+  .rpt-btn { display: none; }
+  section { box-shadow: none; padding: 7px 11px; margin-bottom: 5px; break-inside: avoid; }
+  header { padding: 11px 15px; margin-bottom: 6px; break-after: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rc-bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+`;
+}
+// HTML 柱状图（div+flex，文字不变形；items: {label, value, cls, valLabel}）
+function _rptBars(items, height) {
+  height = height || 80;
+  const ph = height - 14;  // 柱状区高度（留底部 label）
+  const max = Math.max.apply(null, items.map(function (it) { return it.value || 0; })) || 1;
+  let cols = '';
+  items.forEach(function (it) {
+    const h = Math.round((it.value || 0) / max * 100);
+    const val = it.valLabel ? '<span class="rc-val">' + it.valLabel + '</span>' : '';
+    cols += '<div class="rc-col"><div class="rc-plot" style="height:' + ph + 'px"><div class="rc-bar ' + (it.cls || '') + '" style="height:' + h + '%">' + val + '</div></div><div class="rc-lab">' + (it.label || '') + '</div></div>';
+  });
+  return '<div class="rc-bars">' + cols + '</div>';
+}
+function _rptMetric(v, l) { return '<div class="metric"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+function _rptBuildHtml(sum, a, total, genTime, logoUrl) {
+  const money = function (v) { return fmtPrice(v); };
+  const pct = function (x) { return Math.round((x || 0) * 100) + '%'; };
+  const dpct = function (x) { return (x >= 0 ? '+' : '') + Math.round((x || 0) * 100) + '%'; };
+  // ① 量价 + ③ 流动 并排（各 3 metric，省一行）
+  const pa = a.priceAction, lq = a.liquidity;
+  const cell1 = '<div class="rpt-cell"><h2>① 量价诊断</h2><div class="verdict">' + pa.text + '</div><div class="metrics">' + _rptMetric(pa.dailyAvg.toFixed(1), '日均') + (pa.tradeDelta != null ? _rptMetric(dpct(pa.tradeDelta), '量环比') + _rptMetric(dpct(pa.priceDelta), '价环比') : '') + '</div></div>';
+  const cell3 = '<div class="rpt-cell"><h2>③ 流动性成色</h2><div class="verdict">' + lq.flow + '；两栖 ' + pct(lq.bothPct) + '</div><div class="metrics">' + _rptMetric(pct(lq.pureBuyerPct), '纯买') + _rptMetric(pct(lq.pureSellerPct), '纯卖') + _rptMetric(pct(lq.bothPct), '两栖') + '</div>' + (lq.flipCount ? '<div class="hint">倒卖 ' + lq.flipCount + ' 次 · 中位毛利 ' + (lq.avgMargin != null ? dpct(lq.avgMargin) : '—') + ' · 持有 ' + (lq.avgHoldDays != null ? lq.avgHoldDays.toFixed(1) + ' 天' : '—') + '</div>' : '') + '</div>';
+  const s13 = '<section class="rpt-2col">' + cell1 + cell3 + '</section>';
+  // ② 主导结构（GMV 表 + 柱状图）
+  const st = a.structure;
+  let totVol = 0; (st.matrix || []).forEach(function (r) { totVol += r.volume || 0; });
+  let s2 = '<section><h2>② 主导结构</h2><div class="verdict">' + (st.main ? st.main.rarity + ' 贡献 ' + pct(st.main.pct) + ' 成交额；' + st.hhiTier + '（top10 占 ' + pct(st.top10Pct) + '）' : '暂无数据') + '</div>';
+  s2 += '<table><thead><tr><th>稀有度</th><th>笔数</th><th>额占比</th><th>均价</th></tr></thead><tbody>';
+  (st.matrix || []).forEach(function (r) { s2 += '<tr><td>' + r.rarity + '</td><td>' + r.trades + '</td><td>' + (totVol ? Math.round((r.volume || 0) / totVol * 100) + '%' : '-') + '</td><td>' + money(r.avgPrice) + '</td></tr>'; });
+  s2 += '</tbody></table><div class="hint">各稀有度成交额（GMV）占比</div>' + _rptBars((st.matrix || []).map(function (r) { return { label: r.rarity, value: r.volume, cls: 'rc-' + r.rarity }; }), 64) + '</section>';
+  // ④ 定价合理性（价格分布柱状图）
+  const va = a.valuation;
+  let s4 = '<section><h2>④ 定价合理性</h2><div class="verdict">' + va.skewTier + '；价格' + va.cvTier + (va.ladderOk ? '' : '；稀有度阶梯塌缩') + '</div>';
+  s4 += '<div class="metrics">' + _rptMetric(money(va.median), '中位价') + _rptMetric(money(va.avg), '均价') + _rptMetric(money(va.p25) + '~' + money(va.p75), 'P25~P75') + '</div>';
+  const ph = sum.priceHistogram || [];
+  if (ph.length) s4 += '<div class="hint">价格分布（柱标价格下界 · 对数分箱）</div>' + _rptBars(ph.map(function (b) { return { label: fmtK(b.lo), value: b.count, valLabel: String(b.count) }; }), 64);
+  s4 += '</section>';
+  // ⑤ 热门标的（Top3，单页紧凑）
+  let s5 = '<section><h2>⑤ 热门标的</h2><table><thead><tr><th>成交额 Top 3</th><th>额</th></tr></thead><tbody>';
+  (sum.topVolume || []).slice(0, 3).forEach(function (c) { s5 += '<tr><td>' + (c.filmName || '?') + '</td><td>' + money(c.volume) + '</td></tr>'; });
+  s5 += '</tbody></table><table style="margin-top:6px"><thead><tr><th>流通 Top 3</th><th>卡数</th></tr></thead><tbody>';
+  (sum.topCirculation || []).slice(0, 3).forEach(function (c) { s5 += '<tr><td>' + (c.filmName || '?') + '</td><td>' + (c.uniqueCards || 0) + '</td></tr>'; });
+  s5 += '</tbody></table></section>';
+  return '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="' + logoUrl + '"><title>M-Team 卡牌市场分析报告</title><style>' + _rptCSS() + '</style></head><body>'
+    + '<button class="rpt-btn" onclick="window.print()">🖨 打印 / 存 PDF</button>'
+    + '<header><h1>M-Team 卡牌市场分析报告</h1><div class="headline">' + a.headline + '</div><div class="meta">范围 ' + (sum.rangeStart || '').slice(0, 10) + ' ~ ' + (sum.rangeEnd || '').slice(0, 10) + '（不含当天）· 样本 ' + total + ' 笔 · 生成于 ' + genTime + '</div></header>'
+    + s13 + s2 + s4 + s5
+    + '<footer>由 MCard 自动生成 · 数据来自 M-Team 卡牌市场</footer></body></html>';
+}
+function openMarketReport() {
+  const all = (state && state.marketHistory) || [];
+  if (!all.length) { showToast(t('marketData.empty') || '暂无成交数据', 'error'); return; }
+  const now = new Date();
+  const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  // 排除当天（未结束，数据不完整）；统计基准日 = 昨天
+  const yd = new Date(now.getTime() - 86400000);
+  const yesterday = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
+  const hist = all.filter(function (tr) { const d = (tr.tradedAt || '').slice(0, 10); return d && d <= yesterday; });
+  if (!hist.length) { showToast('暂无完整历史数据（已排除当天）', 'error'); return; }
+  const genTime = today + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const sum = computeMarketSummary(hist, null, yesterday);
+  const a = analyzeMarket(sum);
+  const html = _rptBuildHtml(sum, a, hist.length, genTime, location.origin + '/logo.png');
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 15000);
+}
+
 // 每日掉落柱状图：稀有度堆叠（N→R→SR→SSR→UR），金银铜标 Top3 含金量日，自定义 hover tooltip，7/30/90/全部 可切换
 function buildDropChart(sum) {
   const section = el('div', { cls: 'drop-section drop-chart-section' });
@@ -2094,6 +2212,10 @@ function buildMdTabs() {
     b.onclick = function () { mdActiveTab = p[0]; renderMarketData(); };
     wrap.appendChild(b);
   });
+  // 生成报告按钮（紧随交易记录查询 tab，绿色动作按钮，非 tab）
+  const rpt = el('button', { cls: 'seg-btn md-tab md-report', attrs: { type: 'button' }, text: '📄 ' + t('marketData.report') });
+  rpt.onclick = openMarketReport;
+  wrap.appendChild(rpt);
   return wrap;
 }
 
