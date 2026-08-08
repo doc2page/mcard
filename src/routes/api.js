@@ -41,6 +41,13 @@ export function createApiRouter({ state, collector, trader, mteam }) {
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
 
+  router.post('/api/drop-import', async (req, res) => {
+    const { json } = req.body || {};
+    try {
+      res.json(await collector.importDropMessages(String(json || '')));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
+
   router.post('/api/trade', async (req, res) => {
     const { action } = req.body || {};
     try {

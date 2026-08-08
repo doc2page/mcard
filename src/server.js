@@ -29,12 +29,18 @@ function createStoreState(store) {
       const st = state.getState();
       const patch = {};
       const ds = st.dropStats;
-      if (ds && Array.isArray(ds.feedCards) && ds.feedCards.length) {
-        // since 取数据最早一条（官方 feed 仅最新 25 条，起点随数据而定；对齐 mergeDropFeed）
+      if (ds && ((Array.isArray(ds.feedCards) && ds.feedCards.length) || (Array.isArray(ds.messages) && ds.messages.length))) {
+        // feedCards 只留 messages 未覆盖的（> lastMsgDate），避免与导入的全量 messages 双源重叠重复计算
+        const lmd = ds.lastMsgDate || '';
+        const feedCards = (lmd && Array.isArray(ds.feedCards)) ? ds.feedCards.filter((c) => (c.createdDate || '') > lmd) : (ds.feedCards || []);
+        // since 取 messages+feedCards 最早一条（导入的历史 messages 可能早于 feed；对齐 mergeDropFeed）
         let earliest = '';
-        for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+        for (const arr of [feedCards, ds.messages]) {
+          if (!Array.isArray(arr)) continue;
+          for (const it of arr) { const d = it.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+        }
         const since = earliest || ds.since || '';
-        patch.dropStats = Object.assign({}, ds, { since: since, summary: stats.computeDropSummary(ds.messages, ds.feedCards, since, todayStr()) });
+        patch.dropStats = Object.assign({}, ds, { feedCards: feedCards, since: since, summary: stats.computeDropSummary(ds.messages, feedCards, since, todayStr()) });
       }
       if (Array.isArray(st.cardLogs) && st.cardLogs.length) {
         patch.cardLogSummary = stats.computeCardLogSummary(st.cardLogs);

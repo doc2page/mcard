@@ -59,6 +59,7 @@ const BUY_FAIL_REASON = {
 };
 let state = null;
 const PORTRAIT_SPAN_SINCE = '2026-07-01 00:00:00';  // 用户画像消费维度统计起点（固定 7/1，与掉落统计动态 since 无关）
+const DROP_FULL_SINCE = '2026-07-01';  // 掉落数据完整起点（卡片系统 7/1 上线）；rangeStart 非此值说明历史未补全，显示「手动补全」入口
 let view = 'market'; // 卡片区视图：'market'(市场卡牌) | 'trades'(购买记录) | 'orders'(当前挂单)
 let ordersSortDir = 'desc';  // 当前挂单排序：'desc'(最新在上) | 'asc'(最早在上)
 let invSortDir = 'desc';     // 持有卡片排序
@@ -1505,7 +1506,14 @@ function renderDropStats() {
   );
   // 数据实际范围（since 随最新 25 条数据而定，不再固定 7/1）+ 接口限制说明
   if (sum.rangeStart && sum.rangeEnd) hero.appendChild(el('div', { cls: 'drop-hero-range', text: sum.rangeStart + ' ~ ' + sum.rangeEnd }));
-  hero.appendChild(el('div', { cls: 'drop-hero-note', text: t('dropStats.feedNote') }));
+  // 「官方接口仅25条」+「可手动补全」+ 按钮合并显示，仅数据未补全（最早非 7/1）时；补全后整体隐藏
+  if (sum.rangeStart && sum.rangeStart !== DROP_FULL_SINCE) {
+    const cta = el('div', { cls: 'drop-hero-cta' });
+    const ctaBtn = el('button', { cls: 'seg-btn mini', text: '📥 ' + t('dropStats.importBtn'), attrs: { type: 'button' } });
+    ctaBtn.onclick = openDropImportModal;
+    append(cta, el('span', { cls: 'drop-hero-cta-text', text: t('dropStats.feedNote') + ' · ' + t('dropStats.importHint') }), ctaBtn);
+    hero.appendChild(cta);
+  }
 
   // KPI 行：总历时 / 掉落天数 / 最大连续 / 近7天日均
   const kpi = el('div', { cls: 'drop-kpi' });
@@ -1566,6 +1574,81 @@ function renderDropStats() {
   const grid2 = el('div', { cls: 'drop-grid-2' });
   append(grid2, raritySection, titleSection);
   append(box, hero, kpi, chartSection, grid2, renderCardLogCard());
+}
+
+// 导入掉落记录模态：指引 + 粘贴 message search 响应 JSON + 解析导入（补齐 feed 之前的全量历史，messages 通路）
+function openDropImportModal() {
+  const mask = el('div', { cls: 'modal-mask' });
+  const box = el('div', { cls: 'modal drop-import-modal' });
+  const head = el('div', { cls: 'modal-head' });
+  append(head,
+    el('div', { cls: 'modal-icon', text: '📥' }),
+    el('div', { cls: 'modal-title', text: t('dropStats.importTitle') })
+  );
+  box.appendChild(head);
+  const body = el('div', { cls: 'modal-body' });
+  const steps = el('ol', { cls: 'drop-import-steps' });
+  (t('dropStats.importSteps') || '').split('\n').forEach(function (line) {
+    const s = String(line).trim();
+    if (s) steps.appendChild(el('li', { text: s }));
+  });
+  body.appendChild(steps);
+  const ta = el('textarea', { cls: 'drop-import-textarea', attrs: { placeholder: t('dropStats.importPlaceholder'), rows: '8' } });
+  body.appendChild(ta);
+  const result = el('div', { cls: 'drop-import-result' });
+  body.appendChild(result);
+  box.appendChild(body);
+  const cancelBtn = el('button', { cls: 'btn ghost', text: t('common.cancel'), attrs: { type: 'button' } });
+  const importBtn = el('button', { cls: 'btn primary', text: t('dropStats.importDo'), attrs: { type: 'button' } });
+  const actions = el('div', { cls: 'modal-actions' });
+  append(actions, cancelBtn, importBtn);
+  box.appendChild(actions);
+  mask.appendChild(box);
+  document.body.appendChild(mask);
+  requestAnimationFrame(function () { mask.classList.add('show'); });
+  const mainArea = $('mainArea');
+  if (mainArea) mainArea.style.overflow = 'hidden';
+  let done = false;
+  function close() {
+    if (done) return; done = true;
+    document.removeEventListener('keydown', onKey);
+    mask.classList.remove('show');
+    setTimeout(function () { mask.remove(); }, 220);
+    if (mainArea) mainArea.style.overflow = '';
+  }
+  var onKey = function (e) { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  cancelBtn.onclick = close;
+  mask.addEventListener('click', function (e) { if (e.target === mask) close(); });
+  importBtn.onclick = async function () {
+    const json = (ta.value || '').trim();
+    if (!json) { result.textContent = t('dropStats.importEmpty'); result.className = 'drop-import-result err'; return; }
+    importBtn.disabled = true;
+    importBtn.textContent = t('dropStats.importing');
+    try {
+      const r = await send({ type: 'IMPORT_DROPS', json: json });
+      if (r && r.ok) {
+        state = await send({ type: 'GET_STATE' });  // 拉最新（summary/rangeStart 已后端重算），供完整性检查
+        renderAll();
+        if (r.imported > 0) ta.value = '';
+        const parts = [t('dropStats.importResult', { n: r.imported, skip: r.skipped, total: r.total })];
+        if (r.page && r.page.totalPages > 1) parts.push(t('dropStats.importPaging', { pages: r.page.totalPages, page: r.page.pageNumber || 1, total: r.page.total }));
+        const rs = state && state.dropStats && state.dropStats.summary && state.dropStats.summary.rangeStart;
+        if (rs && rs !== DROP_FULL_SINCE) parts.push(t('dropStats.importIncomplete', { date: rs }));
+        result.textContent = parts.join('\n');
+        result.className = 'drop-import-result ' + (r.imported > 0 ? 'ok' : 'info');
+      } else {
+        result.textContent = t('dropStats.importError') + '：' + (t('dropStats.importReason.' + (r && r.reason)) || (r && r.error) || '');
+        result.className = 'drop-import-result err';
+      }
+    } catch (e) {
+      result.textContent = t('dropStats.importError');
+      result.className = 'drop-import-result err';
+    }
+    importBtn.disabled = false;
+    importBtn.textContent = t('dropStats.importDo');
+  };
+  setTimeout(function () { try { ta.focus(); } catch (e) {} }, 60);
 }
 
 // 每日掉落柱状图：稀有度堆叠（N→R→SR→SSR→UR），金银铜标 Top3 含金量日，自定义 hover tooltip，7/30/90/全部 可切换

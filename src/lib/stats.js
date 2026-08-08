@@ -101,13 +101,16 @@ export function computeDropSummary(messages, feedCards, since, today) {
   const days = Object.keys(dayCount).sort();
   // 参考日：today 优先（含 latest→今天的没掉卡日子），否则退回 latest 数据日
   const refDay = today || latest;
+  // since/refDay 统一截到日界（00:00）：since 带时分（如最早掉卡 02:45:56）会让日循环每天偏移，
+  // 导致 endMs(当天 00:00) 裁不掉当天（当天 HH:MM > 00:00），最后一天（当天）丢失
+  const sinceMs = _dropMt((since || '').slice(0, 10));
+  const refDayMs = _dropMt((refDay || '').slice(0, 10));
   // 总历时 = since ~ 参考日（含其间没掉卡的日子）
-  const totalDays = (refDay && since) ? Math.max(1, Math.floor((_dropMt(refDay) - _dropMt(since)) / 86400000) + 1) : 0;
+  const totalDays = (refDay && since && Number.isFinite(sinceMs) && Number.isFinite(refDayMs)) ? Math.max(1, Math.floor((refDayMs - sinceMs) / 86400000) + 1) : 0;
   // 近7天日均 = 参考日往回 7 个自然日的张数和 / 7（没掉卡的日子算 0）
   let recent7Sum = 0;
-  const baseMs = _dropMt(refDay);
-  if (Number.isFinite(baseMs)) {
-    for (let i = 0; i < 7; i++) recent7Sum += (dayCount[_dropDateStr(baseMs - i * 86400000)] || 0);
+  if (Number.isFinite(refDayMs)) {
+    for (let i = 0; i < 7; i++) recent7Sum += (dayCount[_dropDateStr(refDayMs - i * 86400000)] || 0);
   }
   const recent7Avg = recent7Sum / 7;
   // 每日评分 = Σ(稀有度权重 × 张数)：数量都 1-3 张，比数量无区分度，比含金量才有意义
@@ -127,13 +130,10 @@ export function computeDropSummary(messages, feedCards, since, today) {
   for (const r of Object.keys(rarityCount)) weighted += (rarityCount[r] || 0) * (DROP_RARITY_WEIGHT[r] || 0);
   // dailyFull: rangeStart~rangeEnd 每一天的连续序列（含 0 掉落天），供柱状图渲染
   const dailyFull = [];
-  if (refDay && since) {
-    const startMs = _dropMt(since), endMs = _dropMt(refDay);
-    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
-      for (let ms = startMs; ms <= endMs; ms += 86400000) {
-        const ds = _dropDateStr(ms);
-        dailyFull.push({ date: ds, count: dayCount[ds] || 0, rarity: dayBreakdown[ds] || { UR: 0, SSR: 0, SR: 0, R: 0, N: 0 } });
-      }
+  if (refDay && since && Number.isFinite(sinceMs) && Number.isFinite(refDayMs)) {
+    for (let ms = sinceMs; ms <= refDayMs; ms += 86400000) {
+      const ds = _dropDateStr(ms);
+      dailyFull.push({ date: ds, count: dayCount[ds] || 0, rarity: dayBreakdown[ds] || { UR: 0, SSR: 0, SR: 0, R: 0, N: 0 } });
     }
   }
   return {

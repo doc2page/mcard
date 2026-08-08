@@ -22,3 +22,13 @@ test('computeCardLogSummary 仅统计 paid=true', () => {
   assert.equal(s.count, 2);
   assert.equal(s.max, 30000);
 });
+
+test('computeDropSummary dailyFull 含当天（since 带时分不裁当天）', () => {
+  // since 带时分（最早掉卡 02:45:56），today=8-08 且当天有掉落 → dailyFull 必须含 8-08
+  const msgs = [{ createdDate: '2026-08-08 02:37:00', context: '1. N《A》『SPARK』' }];
+  const s = computeDropSummary(msgs, [], '2026-07-01 02:45:56', '2026-08-08');
+  const last = s.dailyFull[s.dailyFull.length - 1];
+  assert.equal(last.date, '2026-08-08', '最后一天应是当天');
+  assert.equal(last.count, 1);
+  assert.equal(s.totalDays, 39, '7-01~8-08 共 39 天');
+});

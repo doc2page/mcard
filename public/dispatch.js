@@ -11,6 +11,7 @@ export function dispatch(msg) {
     case 'LOAD_ORDERS':      return { method: 'POST', path: '/api/collect', body: { type: 'orders' } };
     case 'LOAD_INVENTORY':   return { method: 'POST', path: '/api/collect', body: { type: 'inventory' } };
     case 'LOAD_DROP_STATS':  return { method: 'POST', path: '/api/collect', body: { type: 'drops' } };
+    case 'IMPORT_DROPS':     return { method: 'POST', path: '/api/drop-import', body: { json: msg.json } };
     case 'LOAD_MARKET_DATA': return { method: 'POST', path: '/api/collect', body: { type: 'marketStats' } };
     case 'SEARCH_MARKET':    return { method: 'POST', path: '/api/search', body: { tags: msg.tags, pageSize: msg.pageSize } };
     case 'BUY_CARD':         return { method: 'POST', path: '/api/trade', body: { action: 'buy', variant: msg.variant, expectPrice: msg.expectPrice, maxPrice: msg.maxPrice, skipRefresh: msg.skipRefresh } };

@@ -1175,6 +1175,20 @@ button.stat.active .stat-val { color: var(--accent); }
 .modal-actions .btn.ghost { flex: 1; }
 .modal-actions .btn.buy, .modal-actions .btn.sell, .modal-actions .btn.primary { flex: 4; }
 
+/* 掉落记录导入模态 */
+.drop-import-modal { max-width: 560px; }
+.drop-import-bar { text-align: right; margin-bottom: 4px; }
+.drop-hero-cta { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.drop-hero-cta .seg-btn.mini { padding: 4px 12px; font-size: 12px; }
+.drop-import-steps { margin: 0 0 14px; padding-left: 20px; color: var(--muted); font-size: 12.5px; line-height: 1.75; }
+.drop-import-steps li { margin-bottom: 3px; }
+.drop-import-textarea { width: 100%; min-height: 130px; box-sizing: border-box; resize: vertical; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-3); color: var(--text); }
+.drop-import-textarea:focus { outline: none; border-color: var(--accent); }
+.drop-import-result { min-height: 18px; font-size: 12.5px; margin-top: 10px; }
+.drop-import-result.ok { color: var(--accent); }
+.drop-import-result.err { color: #e53935; }
+.drop-import-result.info { color: var(--muted); }
+
 /* hero（购买模态窗顶部：海报 + 片名 + 价格） */
 .modal-hero { display: flex; align-items: flex-start; gap: 30px; margin-bottom: 24px; }
 .modal-poster {
@@ -1404,7 +1418,7 @@ button.stat.active .stat-val { color: var(--accent); }
 .dct-dot.r-N { background: var(--r-N); }
 .dct-dot.r-mech { background: var(--r-mech); }
 .drop-chart-bars { display: flex; align-items: stretch; gap: 1px; height: 140px; padding-top: 34px; min-width: 100%; }
-.drop-chart-bar { flex: 1 1 0; min-width: 3px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; border-radius: 3px 3px 0 0; cursor: pointer; box-sizing: border-box; position: relative; transform-origin: bottom; animation: dct-grow .45s cubic-bezier(.2,.8,.2,1); transition: filter .12s, opacity .12s; }
+.drop-chart-bar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; border-radius: 3px 3px 0 0; cursor: pointer; box-sizing: border-box; position: relative; transform-origin: bottom; animation: dct-grow .45s cubic-bezier(.2,.8,.2,1); transition: filter .12s, opacity .12s; }
 @keyframes dct-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .drop-chart-bars.hovering .drop-chart-bar:not(.hover) { opacity: 0.35; }
 .drop-chart-bar.hover { filter: brightness(1.15); }
@@ -1427,7 +1441,7 @@ button.stat.active .stat-val { color: var(--accent); }
 .drop-chart-seg.r-N   { background: var(--r-N); }
 .drop-chart-seg.r-mech { background: var(--r-mech); }
 .drop-chart-axis { display: flex; gap: 1px; min-width: 100%; margin-top: 6px; }
-.drop-chart-axis-slot { flex: 1 1 0; min-width: 3px; text-align: center; font-family: var(--font-mono); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: visible; }
+.drop-chart-axis-slot { flex: 1 1 0; min-width: 0; text-align: center; font-family: var(--font-mono); font-size: 9px; color: var(--muted); white-space: nowrap; overflow: visible; }
 .drop-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
 /* 魔力符券卡片：整体 flex 纵向布局 + 子块间距，避免内部小卡片挤在一起 */
 .cardlog-card { display: flex; flex-direction: column; gap: 18px; }

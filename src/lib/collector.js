@@ -470,6 +470,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     const st = await state.getState();
     const ds = Object.assign({}, st.dropStats || {});
     ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards.slice() : [];
+    if (ds.lastMsgDate) ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // 只留 messages 未覆盖的（> lastMsgDate），避免与导入的全量 messages 双源重叠
     ds.since = ds.since || '';
     const existIds = new Set(ds.feedCards.map((c) => String(c.cardId)));
     const cursor = ds.lastMsgDate || '';   // feed 只补 msg 最新之后，不重叠
@@ -485,12 +486,13 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       added++;
     }
     if (added) ds.feedCards.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
-    // since 取数据中最早一条的掉卡时间（官方 feed 仅返回最新 25 条，起点随实际数据而定，不再固定 7/1）
-    if (ds.feedCards.length) {
-      let earliest = '';
-      for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
-      if (earliest) ds.since = earliest;
+    // since 取 messages+feedCards 最早一条（导入的历史 messages 可能早于 feed，不能只看 feed 丢起点）
+    let earliest = '';
+    for (const arr of [ds.messages, ds.feedCards]) {
+      if (!Array.isArray(arr)) continue;
+      for (const it of arr) { const d = it.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
     }
+    if (earliest) ds.since = earliest;
     ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
     await state.update({ dropStats: ds });
     console.log('[mcard] drop merged (feed), +' + added + ', total feedCards', ds.feedCards.length);
@@ -514,6 +516,60 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       return out;
     })();
     return _dropPromise;
+  }
+
+  // ============ 导入掉落记录（手动粘贴 message search 响应，补齐 feed 之前的全量历史）============
+  // 用户在 kp.m-team.cc/message/-2 搜「卡片掉落」→ 复制 search 请求响应 → 粘贴到前端模态 → 此处解析合并。
+  // 与 feed 互补：messages=全量历史（本入口），feedCards=近期增量（feed 接口）；computeDropSummary 双源聚合。
+  async function importDropMessages(raw) {
+    const parsed = _parseDropJson(raw);
+    if (!parsed.ok) return parsed;
+    const st = await state.getState();
+    const ds = Object.assign({}, st.dropStats || {});
+    ds.messages = Array.isArray(ds.messages) ? ds.messages.slice() : [];
+    ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards.slice() : [];
+    const existIds = new Set(ds.messages.map((m) => String(m.id)));
+    let imported = 0, skipped = 0;
+    for (const it of parsed.items) {
+      if (!it || it.id == null) { skipped++; continue; }
+      const id = String(it.id);
+      if (existIds.has(id)) { skipped++; continue; }
+      const ctx = it.context || '';
+      if (!stats.parseDropContext(ctx).length) { skipped++; continue; }  // 只留能解析出卡片的掉卡 message
+      ds.messages.push({ id: id, createdDate: it.createdDate || '', context: ctx });
+      existIds.add(id);
+      imported++;
+    }
+    if (imported) {
+      ds.messages.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
+      ds.lastMsgDate = ds.messages[0].createdDate;  // feed 游标 = messages 最新，只补其后，不与导入历史重叠
+      ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // messages 是全量（含近期），剔除 feedCards 中已被覆盖的重叠部分，避免双源重复计算
+      let earliest = '';
+      for (const m of ds.messages) { const d = m.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+      for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+      if (earliest) ds.since = earliest;
+      ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
+      await state.update({ dropStats: ds });
+      console.log('[mcard] drop imported (messages), +' + imported + ', total messages', ds.messages.length);
+    }
+    return { ok: true, imported: imported, skipped: skipped, total: ds.messages.length, page: parsed.page || null };
+  }
+
+  // 解析粘贴 JSON → message 数组。容忍完整响应 {code,data:{data:[...]}} / {data:[...]} / 裸数组 / 单条。
+  function _parseDropJson(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return { ok: false, reason: 'empty' };
+    let obj;
+    try { obj = JSON.parse(raw); } catch (e) { return { ok: false, reason: 'invalid_json' }; }
+    let arr, page = null;
+    if (Array.isArray(obj)) arr = obj;
+    else if (obj && obj.data && Array.isArray(obj.data.data)) {
+      arr = obj.data.data;
+      page = { totalPages: Number(obj.data.totalPages) || 0, total: Number(obj.data.total) || 0, pageNumber: Number(obj.data.pageNumber) || 0, pageSize: Number(obj.data.pageSize) || 0 };
+    }
+    else if (obj && Array.isArray(obj.data)) arr = obj.data;
+    else if (obj && typeof obj === 'object' && obj.id != null) arr = [obj];
+    else return { ok: false, reason: 'no_messages' };
+    return { ok: true, items: arr, page: page };
   }
 
   // ============ 询价：orderbook 直连（取最高买价 bids[0]，bids 按价格降序）============
@@ -601,6 +657,6 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     fetchProfile, fetchMyBonus,
     syncList, onProfileData, ensureMyTrades, ensureMyOrders, ensureMarketData,
     ensureCardLogs, ensureInventoryData, fetchMechanismList,
-    ensureDropStats, queryOrderbook, searchMarket, refreshAll, setConfig, clearData,
+    ensureDropStats, importDropMessages, queryOrderbook, searchMarket, refreshAll, setConfig, clearData,
   };
 }
