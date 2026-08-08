@@ -26,6 +26,8 @@ npm test                              # node --test tests/**/*.test.js
 - **手动触发**：所有采集/交易由页面手动点击触发，无后台轮询（反风控）。冷却：market 8s / trades·orders·marketData 8s / cardLog·inventory 30s + `isRoundRunning` 锁 + randSleep 400-900ms。
 - **运行锁勿跨重启持久化**：`isRoundRunning` 是进程内瞬时态——启动时 `server.js` 的 `createStoreState` 强制重置为 false、`round=null`；`collector.js` 的 `startRound` 用 try/finally 兜底 `onRoundDone`（解锁）。否则一次采集崩溃会让锁卡 true 进 db，重启后 `triggerRefreshRound` 永远走 `queued` 分支、市场采集再也不触发（症状：市场卡片停旧快照，但行情/持有/挂单/掉落照常刷新）。
 - **since 两套别混**：掉落统计 since = 官方最新 25 条数据的最早时间（动态）；**用户画像消费维度**用固定 7/1（`PORTRAIT_SPAN_SINCE` 常量，app.js 顶部；前端没加载 dropStats.js，不能直接用其 `DROP_SINCE_DEFAULT`）。
+- **掉落统计双源 + 手动导入**：`dropStats.messages`（用户粘贴 message search 响应手动导入的全量历史）+ `feedCards`（feed 接口最新 25 条增量），`computeDropSummary(messages, feedCards, since, today)` 双源聚合。导入入口 `POST /api/drop-import`（dispatch `IMPORT_DROPS`），hero CTA 仅在 `rangeStart ≠ 2026-07-01`（`DROP_FULL_SINCE`，数据未补全）时显示。**双源勿重叠**：`feedCards` 只存 `createdDate > lastMsgDate`（messages 未覆盖的增量），否则与 messages 时间区间重叠会被聚合各算一遍导致重复（mergeDropFeed / importDropMessages / createStoreState 三处均维护此不变量）。
+- **掉落 dailyFull 日界**：`computeDropSummary`（stats.js）算 dailyFull / totalDays 的起止点必须截到日界 `slice(0,10)`——`since` 带时分（最早掉卡 `HH:MM:SS`）会让日循环每天偏移，`endMs`（当天 00:00）把当天柱子裁掉。
 - **设置存后端**：lockedCards 在 config；仅 theme/privacy 留前端 localStorage。
 - **不主动 Playwright 验证**：改完 rebuild + restart 后直接交用户验证，别主动开 Playwright 截图/测量。
 
@@ -48,3 +50,7 @@ npm test                              # node --test tests/**/*.test.js
 ## 文档
 
 `README.md`（中）+ `README.en.md`（英），互相链接。仓库 2026-08-07 整理：原 `mcard-server/` 子目录移到根（52 文件 rename 保历史），`mcard-main`/`docs`/截图已删。
+
+## CLAUDE.md 维护
+
+Claude **自主判断**更新本文件：发现新的长期约定 / 架构规则 / 踩坑（影响频率、检测风险、隐蔽性、数据正确性）时，主动追加到对应小节，不必等用户指示。临时进度（当前任务 / 下一步 / 未决）仍走 `HANDOFF.md`，勿混（分工见全局 CLAUDE.md「会话交接机制」）。
