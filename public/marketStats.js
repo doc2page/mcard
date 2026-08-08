@@ -401,7 +401,10 @@ function _relations(subset) {
 function computeMarketSummary(trades, filter, today) {
   const all = Array.isArray(trades) ? trades : [];
   const subset = filter ? all.filter(function (tr) {
-    if (filter.rarities && filter.rarities.size && !filter.rarities.has(tr.rarity)) return false;
+    if (filter.rarities && filter.rarities.size) {
+      if (tr.provenance === 'mech') return false;   // 机制卡有稀有度但归「来源」筛选管，不参与稀有度筛选（对齐 _cardRanks 稀有度矩阵口径）
+      if (!filter.rarities.has(tr.rarity)) return false;
+    }
     if (filter.provenances && filter.provenances.size && !filter.provenances.has(tr.provenance)) return false;
     if (filter.titles && filter.titles.size && !filter.titles.has(tr.title)) return false;
     const ds = _dateStr(_mkMs(tr.tradedAt));
@@ -462,7 +465,10 @@ function filterTrades(hist, filter, search, dir) {
   var uid = (search && /^\d+$/.test(search)) ? search : null;
   return hist.filter(function (r) {
     if (filter) {
-      if (filter.rarities && filter.rarities.size && !filter.rarities.has(r.rarity)) return false;
+      if (filter.rarities && filter.rarities.size) {
+        if (r.provenance === 'mech') return false;   // 机制卡归「来源」筛选管，不参与稀有度筛选（与 computeMarketSummary 一致）
+        if (!filter.rarities.has(r.rarity)) return false;
+      }
       if (filter.provenances && filter.provenances.size && !filter.provenances.has(r.provenance)) return false;
       if (filter.titles && filter.titles.size && !filter.titles.has(r.title)) return false;
       if (filter.dateFrom || filter.dateTo) {
