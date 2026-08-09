@@ -1726,36 +1726,43 @@ function _rptBuildHtml(sum, a, total, genTime, logoUrl) {
   const money = function (v) { return fmtPrice(v); };
   const pct = function (x) { return Math.round((x || 0) * 100) + '%'; };
   const dpct = function (x) { return (x >= 0 ? '+' : '') + Math.round((x || 0) * 100) + '%'; };
-  // ① 量价 + ③ 流动 并排（各 3 metric，省一行）
-  const pa = a.priceAction, lq = a.liquidity;
-  const cell1 = '<div class="rpt-cell"><h2>① 量价诊断</h2><div class="verdict">' + pa.text + '</div><div class="metrics">' + _rptMetric(pa.dailyAvg.toFixed(1), '日均') + (pa.tradeDelta != null ? _rptMetric(dpct(pa.tradeDelta), '量环比') + _rptMetric(dpct(pa.priceDelta), '价环比') : '') + '</div></div>';
-  const cell3 = '<div class="rpt-cell"><h2>③ 流动性成色</h2><div class="verdict">' + lq.flow + '；两栖 ' + pct(lq.bothPct) + '</div><div class="metrics">' + _rptMetric(pct(lq.pureBuyerPct), '纯买') + _rptMetric(pct(lq.pureSellerPct), '纯卖') + _rptMetric(pct(lq.bothPct), '两栖') + '</div>' + (lq.flipCount ? '<div class="hint">倒卖 ' + lq.flipCount + ' 次 · 中位毛利 ' + (lq.avgMargin != null ? dpct(lq.avgMargin) : '—') + ' · 持有 ' + (lq.avgHoldDays != null ? lq.avgHoldDays.toFixed(1) + ' 天' : '—') + '</div>' : '') + '</div>';
+  const lang = window.__lang === 'en' ? 'en' : 'zh';
+  const pa = a.priceAction, lq = a.liquidity, st = a.structure, va = a.valuation;
+  // ① 量价 + ③ 流动 并排
+  const cell1 = '<div class="rpt-cell"><h2>' + t('report.pa') + '</h2><div class="verdict">' + t('report.paVerdict.' + pa.tier) + '</div><div class="metrics">' + _rptMetric(pa.dailyAvg.toFixed(1), t('report.dailyAvg')) + (pa.tradeDelta != null ? _rptMetric(dpct(pa.tradeDelta), t('report.tradeDelta')) + _rptMetric(dpct(pa.priceDelta), t('report.priceDelta')) : '') + '</div></div>';
+  const cell3 = '<div class="rpt-cell"><h2>' + t('report.liq') + '</h2><div class="verdict">' + t('report.flow.' + lq.flow) + '；' + t('report.both') + ' ' + pct(lq.bothPct) + '</div><div class="metrics">' + _rptMetric(pct(lq.pureBuyerPct), t('report.pureBuyer')) + _rptMetric(pct(lq.pureSellerPct), t('report.pureSeller')) + _rptMetric(pct(lq.bothPct), t('report.both')) + '</div>' + (lq.flipCount ? '<div class="hint">' + t('report.flipHint', { n: lq.flipCount, m: lq.avgMargin != null ? dpct(lq.avgMargin) : '—', d: lq.avgHoldDays != null ? lq.avgHoldDays.toFixed(1) : '—' }) + '</div>' : '') + '</div>';
   const s13 = '<section class="rpt-2col">' + cell1 + cell3 + '</section>';
-  // ② 主导结构（GMV 表 + 柱状图）
-  const st = a.structure;
+  // ② 主导结构
   let totVol = 0; (st.matrix || []).forEach(function (r) { totVol += r.volume || 0; });
-  let s2 = '<section><h2>② 主导结构</h2><div class="verdict">' + (st.main ? st.main.rarity + ' 贡献 ' + pct(st.main.pct) + ' 成交额；' + st.hhiTier + '（top10 占 ' + pct(st.top10Pct) + '）' : '暂无数据') + '</div>';
-  s2 += '<table><thead><tr><th>稀有度</th><th>笔数</th><th>额占比</th><th>均价</th></tr></thead><tbody>';
+  let s2 = '<section><h2>' + t('report.structure') + '</h2><div class="verdict">' + (st.main ? st.main.rarity + ' ' + t('report.contributed') + ' ' + pct(st.main.pct) + ' ' + t('report.gmv') + '；' + t('report.hhiTier.' + st.hhiTier) + '（' + t('report.top10') + ' ' + pct(st.top10Pct) + '）' : t('report.noData')) + '</div>';
+  s2 += '<table><thead><tr><th>' + t('report.thRarity') + '</th><th>' + t('report.thTrades') + '</th><th>' + t('report.thShare') + '</th><th>' + t('report.thAvg') + '</th></tr></thead><tbody>';
   (st.matrix || []).forEach(function (r) { s2 += '<tr><td>' + r.rarity + '</td><td>' + r.trades + '</td><td>' + (totVol ? Math.round((r.volume || 0) / totVol * 100) + '%' : '-') + '</td><td>' + money(r.avgPrice) + '</td></tr>'; });
-  s2 += '</tbody></table><div class="hint">各稀有度成交额（GMV）占比</div>' + _rptBars((st.matrix || []).map(function (r) { return { label: r.rarity, value: r.volume, cls: 'rc-' + r.rarity }; }), 64) + '</section>';
-  // ④ 定价合理性（价格分布柱状图）
-  const va = a.valuation;
-  let s4 = '<section><h2>④ 定价合理性</h2><div class="verdict">' + va.skewTier + '；价格' + va.cvTier + (va.ladderOk ? '' : '；稀有度阶梯塌缩') + '</div>';
-  s4 += '<div class="metrics">' + _rptMetric(money(va.median), '中位价') + _rptMetric(money(va.avg), '均价') + _rptMetric(money(va.p25) + '~' + money(va.p75), 'P25~P75') + '</div>';
+  s2 += '</tbody></table><div class="hint">' + t('report.gmvHint') + '</div>' + _rptBars((st.matrix || []).map(function (r) { return { label: r.rarity, value: r.volume, cls: 'rc-' + r.rarity }; }), 64) + '</section>';
+  // ④ 定价
+  let s4 = '<section><h2>' + t('report.valuation') + '</h2><div class="verdict">' + t('report.skewTier.' + va.skewTier) + '；' + t('report.price') + t('report.cvTier.' + va.cvTier) + (va.ladderOk ? '' : '；' + t('report.ladderCollapse')) + '</div>';
+  s4 += '<div class="metrics">' + _rptMetric(money(va.median), t('report.median')) + _rptMetric(money(va.avg), t('report.avg')) + _rptMetric(money(va.p25) + '~' + money(va.p75), t('report.p2575')) + '</div>';
   const ph = sum.priceHistogram || [];
-  if (ph.length) s4 += '<div class="hint">价格分布（柱标价格下界 · 对数分箱）</div>' + _rptBars(ph.map(function (b) { return { label: fmtK(b.lo), value: b.count, valLabel: String(b.count) }; }), 64);
+  if (ph.length) s4 += '<div class="hint">' + t('report.distHint') + '</div>' + _rptBars(ph.map(function (b) { return { label: fmtK(b.lo), value: b.count, valLabel: String(b.count) }; }), 64);
   s4 += '</section>';
-  // ⑤ 热门标的（Top3，单页紧凑）
-  let s5 = '<section><h2>⑤ 热门标的</h2><table><thead><tr><th>成交额 Top 3</th><th>额</th></tr></thead><tbody>';
+  // ⑤ 热门
+  let s5 = '<section><h2>' + t('report.hot') + '</h2><table><thead><tr><th>' + t('report.topVol') + '</th><th>' + t('report.thAmount') + '</th></tr></thead><tbody>';
   (sum.topVolume || []).slice(0, 3).forEach(function (c) { s5 += '<tr><td>' + (c.filmName || '?') + '</td><td>' + money(c.volume) + '</td></tr>'; });
-  s5 += '</tbody></table><table style="margin-top:6px"><thead><tr><th>流通 Top 3</th><th>卡数</th></tr></thead><tbody>';
+  s5 += '</tbody></table><table style="margin-top:6px"><thead><tr><th>' + t('report.topCirc') + '</th><th>' + t('report.thCards') + '</th></tr></thead><tbody>';
   (sum.topCirculation || []).slice(0, 3).forEach(function (c) { s5 += '<tr><td>' + (c.filmName || '?') + '</td><td>' + (c.uniqueCards || 0) + '</td></tr>'; });
   s5 += '</tbody></table></section>';
-  return '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="' + logoUrl + '"><title>M-Team 卡牌市场分析报告</title><style>' + _rptCSS() + '</style></head><body>'
-    + '<button class="rpt-btn" onclick="window.print()">🖨 打印 / 存 PDF</button>'
-    + '<header><h1>M-Team 卡牌市场分析报告</h1><div class="headline">' + a.headline + '</div><div class="meta">范围 ' + (sum.rangeStart || '').slice(0, 10) + ' ~ ' + (sum.rangeEnd || '').slice(0, 10) + '（不含当天）· 样本 ' + total + ' 笔 · 生成于 ' + genTime + '</div></header>'
+  // headline（摘要，i18n 拼）
+  const hl = [];
+  if (sum.rangeStart && sum.rangeEnd) hl.push(sum.rangeStart.slice(0, 10) + ' ~ ' + sum.rangeEnd.slice(0, 10));
+  if (sum.totalTrades) hl.push(sum.totalTrades + ' ' + t('report.trades'));
+  if (pa.tier !== 'nodata') hl.push(t('report.paVerdict.' + pa.tier));
+  if (st.main) hl.push(st.main.rarity + ' ' + t('report.dominant') + '(' + pct(st.main.pct) + ')');
+  hl.push(t('report.flow.' + lq.flow));
+  hl.push(t('report.hhiTier.' + st.hhiTier));
+  return '<!DOCTYPE html><html lang="' + lang + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="' + logoUrl + '"><title>' + t('report.title') + '</title><style>' + _rptCSS() + '</style></head><body>'
+    + '<button class="rpt-btn" onclick="window.print()">' + t('report.print') + '</button>'
+    + '<header><h1>' + t('report.title') + '</h1><div class="headline">' + hl.join(' ｜ ') + '</div><div class="meta">' + t('report.range') + ' ' + (sum.rangeStart || '').slice(0, 10) + ' ~ ' + (sum.rangeEnd || '').slice(0, 10) + '（' + t('report.excludeToday') + '）· ' + t('report.sample') + ' ' + total + ' ' + t('report.trades') + ' · ' + t('report.generated') + ' ' + genTime + '</div></header>'
     + s13 + s2 + s4 + s5
-    + '<footer>由 MCard 自动生成 · 数据来自 M-Team 卡牌市场</footer></body></html>';
+    + '<footer>' + t('report.footer') + '</footer></body></html>';
 }
 function openMarketReport() {
   const all = (state && state.marketHistory) || [];

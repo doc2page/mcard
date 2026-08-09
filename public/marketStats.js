@@ -445,24 +445,24 @@ function analyzeMarket(sum) {
   }
   const dailyAvg = days ? sum.totalTrades / days : 0;
 
-  // —— ① 量价诊断（四象限）——
+  // —— ① 量价诊断（四象限）—— tier: expand/sell/divergence/cool/flat/nodata（语言无关 key，报告端翻译）
   const tr = sum.trend;
   let priceAction;
   if (!tr) {
-    priceAction = { tier: 'nodata', text: '数据不足 14 天，暂无量价趋势', dailyAvg: dailyAvg };
+    priceAction = { tier: 'nodata', dailyAvg: dailyAvg };
   } else {
     const td = tr.tradeDeltaPct || 0, pd = tr.priceDeltaPct || 0;
     const up = (x) => x > MR_THRESH.trend, down = (x) => x < -MR_THRESH.trend;
-    let tier, text;
-    if (up(td) && up(pd)) { tier = 'expand'; text = '需求扩张，量价齐升'; }
-    else if (up(td) && down(pd)) { tier = 'sell'; text = '放量下跌，抛压加重'; }
-    else if (down(td) && up(pd)) { tier = 'divergence'; text = '量价背离，有价无市风险'; }
-    else if (down(td) && down(pd)) { tier = 'cool'; text = '量价齐缩，市场冷清'; }
-    else { tier = 'flat'; text = '成交平稳'; }
-    priceAction = { tier: tier, text: text, dailyAvg: dailyAvg, tradeDelta: td, priceDelta: pd };
+    let tier;
+    if (up(td) && up(pd)) tier = 'expand';
+    else if (up(td) && down(pd)) tier = 'sell';
+    else if (down(td) && up(pd)) tier = 'divergence';
+    else if (down(td) && down(pd)) tier = 'cool';
+    else tier = 'flat';
+    priceAction = { tier: tier, dailyAvg: dailyAvg, tradeDelta: td, priceDelta: pd };
   }
 
-  // —— ② 主导结构（GMV 占比 + 集中度）—— 笔数会骗人，用成交额结构看资金真实重心
+  // —— ② 主导结构（GMV 占比 + 集中度）—— hhiTier: dispersed/moderate/oligopoly
   const rm = sum.rarityMatrix || [];
   let totVol = 0;
   for (let i = 0; i < rm.length; i++) totVol += (rm[i].volume || 0);
@@ -474,11 +474,11 @@ function analyzeMarket(sum) {
     second: sorted[1] ? { rarity: sorted[1].rarity, pct: sorted[1].volume / safe } : null,
     matrix: rm,
     hhi: hhi,
-    hhiTier: hhi < MR_THRESH.hhi[0] ? '分散竞争' : hhi < MR_THRESH.hhi[1] ? '中度集中' : '寡头集中',
+    hhiTier: hhi < MR_THRESH.hhi[0] ? 'dispersed' : hhi < MR_THRESH.hhi[1] ? 'moderate' : 'oligopoly',
     top10Pct: (sum.concentration && sum.concentration.top10Pct) || 0,
   };
 
-  // —— ③ 流动性成色（资金流向 + 投机 + 倒卖）—— 买卖三方是资金流向 X 光
+  // —— ③ 流动性成色（资金流向 + 投机 + 倒卖）—— flow: inflow/outflow/balanced; bothTier: heavy/moderate/collector
   const ov = sum.overlap || {};
   const pb = ov.pureBuyerPct || 0, ps = ov.pureSellerPct || 0, bt = ov.bothPct || 0;
   const flips = sum.flips || [];
@@ -489,15 +489,15 @@ function analyzeMarket(sum) {
   const margins = flips.map((f) => f.avgMargin || 0).filter((x) => x).sort((a, b) => a - b);
   const holds = flips.map((f) => f.avgHoldDays || 0).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
   const liquidity = {
-    flow: pb > ps * MR_THRESH.flow ? '净入场（资金流入）' : ps > pb * MR_THRESH.flow ? '净离场（资金流出）' : '买卖均衡',
+    flow: pb > ps * MR_THRESH.flow ? 'inflow' : ps > pb * MR_THRESH.flow ? 'outflow' : 'balanced',
     pureBuyerPct: pb, pureSellerPct: ps, bothPct: bt,
-    bothTier: bt > MR_THRESH.both[1] ? '投机偏重' : bt > MR_THRESH.both[0] ? '适中' : '收藏主导',
+    bothTier: bt > MR_THRESH.both[1] ? 'heavy' : bt > MR_THRESH.both[0] ? 'moderate' : 'collector',
     flipCount: flipSum,
     avgMargin: medOf(margins),
     avgHoldDays: medOf(holds),
   };
 
-  // —— ④ 定价合理性（偏态 + 阶梯 + 离散）——
+  // —— ④ 定价合理性（偏态 + 阶梯 + 离散）—— skewTier: skewed/symmetric; cvTier: consensus/normal/divergent
   const med = sum.medianPrice || 0, avg = sum.avgPrice || 0;
   const skew = med ? avg / med : 1;
   const cv = avg ? (sum.priceStd || 0) / avg : 0;
@@ -512,21 +512,13 @@ function analyzeMarket(sum) {
   }
   const valuation = {
     median: med, avg: avg, skew: skew,
-    skewTier: skew > MR_THRESH.skew ? '右偏（高价品拉高均价，中位更真实）' : '近对称',
+    skewTier: skew > MR_THRESH.skew ? 'skewed' : 'symmetric',
     p25: sum.priceP25 || 0, p75: sum.priceP75 || 0, p90: sum.priceP90 || 0,
-    cv: cv, cvTier: cv < MR_THRESH.cv[0] ? '共识强' : cv < MR_THRESH.cv[1] ? '一般' : '分歧大',
+    cv: cv, cvTier: cv < MR_THRESH.cv[0] ? 'consensus' : cv < MR_THRESH.cv[1] ? 'normal' : 'divergent',
     ladderOk: ladderOk, ladderGaps: ladderGaps,
   };
 
-  // —— 顶端摘要 ——
-  const parts = [];
-  if (sum.rangeStart && sum.rangeEnd) parts.push(sum.rangeStart.slice(0, 10) + ' ~ ' + sum.rangeEnd.slice(0, 10));
-  if (sum.totalTrades) parts.push(sum.totalTrades + ' 笔');
-  if (priceAction.text && priceAction.tier !== 'nodata') parts.push(priceAction.text);
-  if (structure.main) parts.push(structure.main.rarity + ' 主导(' + Math.round(structure.main.pct * 100) + '%)');
-  if (liquidity.flow) parts.push(liquidity.flow);
-  parts.push(structure.hhiTier);
-  return { headline: parts.join(' ｜ '), days: days, dailyAvg: dailyAvg, priceAction: priceAction, structure: structure, liquidity: liquidity, valuation: valuation };
+  return { days: days, dailyAvg: dailyAvg, priceAction: priceAction, structure: structure, liquidity: liquidity, valuation: valuation };
 }
 
 // 从全量提取可选筛选值（不受当前筛选影响，供 chips）
