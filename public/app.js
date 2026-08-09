@@ -577,6 +577,8 @@ function renderCards() {
   // 仅显示当前勾选的稀有度（按标准顺序），缓存仍保留以便重新勾选时立即可见
   const activeSet = new Set((state.config && state.config.rarities) || RARITIES);
   const orderedActive = RARITIES.filter((r) => activeSet.has(r));
+  // 用户当前挂单（open sell）卖价 key：filmId|rarity|provenance|price —— 市场卡同款同价=自己的挂单（最低价就是自己在卖），购买按钮灰显
+  const myAsks = new Set((((state && state.ordersAll) || []).filter((o) => o.status === 'open' && o.side === 'sell')).map((o) => [o.filmId, o.rarity, o.provenance, Number(o.price)].join('|')));
 
   // 数据源 + 过滤分叉：有定向 tag → searchResults 全部显示（不过稀有度/机制卡/称号/价格阈值）；否则 → buckets + 阈值/称号过滤
   let all = [];
@@ -664,7 +666,7 @@ function renderCards() {
     const sorted = shown.slice().sort((a, b) =>
       (a.lowestAsk == null ? Infinity : Number(a.lowestAsk)) - (b.lowestAsk == null ? Infinity : Number(b.lowestAsk)));
     const list = sorted.slice(0, 300);
-    list.forEach((it, i) => grid.appendChild(buildCard(it, Math.min(i, 40) * 30)));
+    list.forEach((it, i) => grid.appendChild(buildCard(it, Math.min(i, 40) * 30, myAsks)));
     if (sorted.length > list.length) {
       grid.appendChild(el('div', { cls: 'group-more', text: t('card.priceTruncate', { shown: list.length, total: sorted.length }) }));
     }
@@ -690,7 +692,7 @@ function renderCards() {
       list.sort((a, b) => (a.lowestAsk == null ? Infinity : Number(a.lowestAsk)) - (b.lowestAsk == null ? Infinity : Number(b.lowestAsk)));
       grid.appendChild(groupHeader(r, list.length));
       const slice = list.slice(0, 100);
-      slice.forEach((it) => { grid.appendChild(buildCard(it, Math.min(cardIndex, 40) * 30)); cardIndex++; });
+      slice.forEach((it) => { grid.appendChild(buildCard(it, Math.min(cardIndex, 40) * 30, myAsks)); cardIndex++; });
       if (list.length > slice.length) {
         grid.appendChild(el('div', { cls: 'group-more', text: t('card.groupTruncate', { n: (list.length - slice.length) }) }));
       }
@@ -708,7 +710,7 @@ function groupHeader(r, count) {
   return h;
 }
 
-function buildCard(it, delay) {
+function buildCard(it, delay, myAsks) {
   const isMech = isMechCard(it);
   const rarity = (it.variant && it.variant.rarity) || '';
   const url = buildDetailUrl(it, (state.config && state.config.webBase) || 'kp.m-team.cc');
@@ -759,7 +761,13 @@ function buildCard(it, delay) {
   if (price != null) append(priceEl, document.createTextNode(fmtPrice(price)), el('span', { cls: 'unit', text: t('common.magic') }));
   else priceEl.appendChild(el('span', { cls: 'unit', text: '—' }));
   const buyBtn = el('button', { cls: 'ca-btn buy', attrs: { title: t('card.buyBtnTitle') }, text: t('card.buyBtn') });
-  buyBtn.onclick = (e) => { e.stopPropagation(); onBuy(it); };
+  // 同款（filmId+rarity+provenance）同价 = 用户自己的挂单（最低价就是自己在卖）→ 灰显，避免自买
+  if (myAsks && price != null && it.variant && myAsks.has([it.variant.filmId, rarity, it.variant.provenance, price].join('|'))) {
+    buyBtn.disabled = true;
+    buyBtn.classList.add('own-listing');
+    buyBtn.title = t('card.ownListing');
+  }
+  buyBtn.onclick = (e) => { e.stopPropagation(); if (!buyBtn.disabled) onBuy(it); };
   append(priceRow, priceEl, buyBtn);
   body.appendChild(priceRow);
 

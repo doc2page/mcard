@@ -117,6 +117,7 @@ registerMessages('en', {
   'card.openInNewTabDetail': 'Open detail in new tab',
   'card.buyBtn': 'Buy',
   'card.buyBtnTitle': 'One-click buy',
+  'card.ownListing': 'This is your own listing',
   'card.unnamed': '(unnamed)',
 
   // ============ 搜索 (search.*) ============

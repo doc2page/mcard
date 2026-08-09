@@ -1047,6 +1047,7 @@ button.stat.active .stat-val { color: var(--accent); }
 .ca-btn:hover { background: var(--surface-3); border-color: var(--accent); color: var(--accent); transform: scale(1.05); }
 .ca-btn.buy { background: var(--buy); border-color: var(--buy); color: #fff; }
 .ca-btn.buy:hover { background: color-mix(in srgb, var(--buy) 80%, #fff); border-color: transparent; color: #fff; transform: scale(1.05); }
+.ca-btn.buy.own-listing, .ca-btn.buy.own-listing:hover { background: var(--surface-3); border-color: var(--border); color: var(--muted); cursor: not-allowed; transform: none; opacity: .7; }
 
 .card-body { padding: 11px 13px 13px; }
 .film-name {

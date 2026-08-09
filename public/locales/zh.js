@@ -122,6 +122,7 @@ registerMessages('zh', {
   'card.openInNewTabDetail': '在新标签打开详情',
   'card.buyBtn': '购买',
   'card.buyBtnTitle': '一键购买',
+  'card.ownListing': '这是你自己的挂单',
   'card.unnamed': '(未命名)',
 
   // ============ 搜索 (search.*) ============
