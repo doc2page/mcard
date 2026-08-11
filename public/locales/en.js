@@ -412,6 +412,7 @@ registerMessages('en', {
   'report.structure': '② Structure',
   'report.contributed': 'contributed',
   'report.gmv': 'of GMV',
+  'report.mech': 'Mech',
   'report.hhiTier.dispersed': 'dispersed competition',
   'report.hhiTier.moderate': 'moderately concentrated',
   'report.hhiTier.oligopoly': 'oligopoly',

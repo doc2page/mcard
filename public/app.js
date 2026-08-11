@@ -1696,7 +1696,9 @@ td:first-child { font-weight: 600; }
 .rc-bar { width: 80%; min-height: 1px; border-radius: 2px 2px 0 0; background: #f5a623; position: relative; }
 .rc-val { position: absolute; top: -13px; left: 0; right: 0; text-align: center; font-size: 9px; color: #666; }
 .rc-lab { font-size: 9px; color: #999; text-align: center; margin-top: 3px; height: 11px; overflow: hidden; }
-.rc-N{background:#9e9e9e}.rc-R{background:#66bb6a}.rc-SR{background:#42a5f5}.rc-SSR{background:#ab47bc}.rc-UR{background:#ff7043}
+.rc-N{background:#9e9e9e}.rc-R{background:#66bb6a}.rc-SR{background:#42a5f5}.rc-SSR{background:#ab47bc}.rc-UR{background:#ff7043}.rc-mech{background:#9c27b0}
+.rpt-mech-row td { border-top: 1px solid #e0d4ec; }
+.rpt-mech-row td:first-child { color: #9c27b0; }
 footer { text-align: center; font-size: 10px; color: #bbb; margin: 10px 0 0; }
 @page { margin: 0; }
 @media print {
@@ -1732,12 +1734,22 @@ function _rptBuildHtml(sum, a, total, genTime, logoUrl) {
   const cell1 = '<div class="rpt-cell"><h2>' + t('report.pa') + '</h2><div class="verdict">' + t('report.paVerdict.' + pa.tier) + '</div><div class="metrics">' + _rptMetric(pa.dailyAvg.toFixed(1), t('report.dailyAvg')) + (pa.tradeDelta != null ? _rptMetric(dpct(pa.tradeDelta), t('report.tradeDelta')) + _rptMetric(dpct(pa.priceDelta), t('report.priceDelta')) : '') + '</div></div>';
   const cell3 = '<div class="rpt-cell"><h2>' + t('report.liq') + '</h2><div class="verdict">' + t('report.flow.' + lq.flow) + '；' + t('report.both') + ' ' + pct(lq.bothPct) + '</div><div class="metrics">' + _rptMetric(pct(lq.pureBuyerPct), t('report.pureBuyer')) + _rptMetric(pct(lq.pureSellerPct), t('report.pureSeller')) + _rptMetric(pct(lq.bothPct), t('report.both')) + '</div>' + (lq.flipCount ? '<div class="hint">' + t('report.flipHint', { n: lq.flipCount, m: lq.avgMargin != null ? dpct(lq.avgMargin) : '—', d: lq.avgHoldDays != null ? lq.avgHoldDays.toFixed(1) : '—' }) + '</div>' : '') + '</div>';
   const s13 = '<section class="rpt-2col">' + cell1 + cell3 + '</section>';
-  // ② 主导结构
-  let totVol = 0; (st.matrix || []).forEach(function (r) { totVol += r.volume || 0; });
-  let s2 = '<section><h2>' + t('report.structure') + '</h2><div class="verdict">' + (st.main ? st.main.rarity + ' ' + t('report.contributed') + ' ' + pct(st.main.pct) + ' ' + t('report.gmv') + '；' + t('report.hhiTier.' + st.hhiTier) + '（' + t('report.top10') + ' ' + pct(st.top10Pct) + '）' : t('report.noData')) + '</div>';
+  // ② 主导结构（普通卡 rarityMatrix + 机制卡 mechMatrix，占比统一按总 GMV = 普通+机制）
+  const mm = st.matrix || [];
+  let totVol = 0; mm.forEach(function (r) { totVol += r.volume || 0; });
+  const mechM = sum.mechMatrix || [];
+  let mechVol = 0, mechTrades = 0; mechM.forEach(function (m) { mechVol += m.volume || 0; mechTrades += m.trades || 0; });
+  const grandVol = (totVol + mechVol) || 1;
+  let mainR = null; mm.forEach(function (r) { if (!mainR || (r.volume || 0) > (mainR.volume || 0)) mainR = r; });
+  const mainPct = mainR ? Math.round((mainR.volume || 0) / grandVol * 100) : 0;
+  const mechPct = Math.round(mechVol / grandVol * 100);
+  let s2 = '<section><h2>' + t('report.structure') + '</h2><div class="verdict">' + (mainR ? mainR.rarity + ' ' + t('report.contributed') + ' ' + mainPct + '% ' + t('report.gmv') : t('report.noData')) + (mechVol ? '；' + t('report.mech') + ' ' + mechPct + '% ' + t('report.gmv') : '') + '；' + t('report.hhiTier.' + st.hhiTier) + '（' + t('report.top10') + ' ' + pct(st.top10Pct) + '）' + '</div>';
   s2 += '<table><thead><tr><th>' + t('report.thRarity') + '</th><th>' + t('report.thTrades') + '</th><th>' + t('report.thShare') + '</th><th>' + t('report.thAvg') + '</th></tr></thead><tbody>';
-  (st.matrix || []).forEach(function (r) { s2 += '<tr><td>' + r.rarity + '</td><td>' + r.trades + '</td><td>' + (totVol ? Math.round((r.volume || 0) / totVol * 100) + '%' : '-') + '</td><td>' + money(r.avgPrice) + '</td></tr>'; });
-  s2 += '</tbody></table><div class="hint">' + t('report.gmvHint') + '</div>' + _rptBars((st.matrix || []).map(function (r) { return { label: r.rarity, value: r.volume, cls: 'rc-' + r.rarity }; }), 64) + '</section>';
+  mm.forEach(function (r) { s2 += '<tr><td>' + r.rarity + '</td><td>' + r.trades + '</td><td>' + Math.round((r.volume || 0) / grandVol * 100) + '%</td><td>' + money(r.avgPrice) + '</td></tr>'; });
+  if (mechVol) s2 += '<tr class="rpt-mech-row"><td>' + t('report.mech') + '</td><td>' + mechTrades + '</td><td>' + mechPct + '%</td><td>' + money(mechVol / (mechTrades || 1)) + '</td></tr>';
+  const s2bars = mm.map(function (r) { return { label: r.rarity, value: r.volume, cls: 'rc-' + r.rarity }; });
+  if (mechVol) s2bars.push({ label: t('report.mech'), value: mechVol, cls: 'rc-mech' });
+  s2 += '</tbody></table><div class="hint">' + t('report.gmvHint') + '</div>' + _rptBars(s2bars, 64) + '</section>';
   // ④ 定价
   let s4 = '<section><h2>' + t('report.valuation') + '</h2><div class="verdict">' + t('report.skewTier.' + va.skewTier) + '；' + t('report.price') + t('report.cvTier.' + va.cvTier) + (va.ladderOk ? '' : '；' + t('report.ladderCollapse')) + '</div>';
   s4 += '<div class="metrics">' + _rptMetric(money(va.median), t('report.median')) + _rptMetric(money(va.avg), t('report.avg')) + _rptMetric(money(va.p25) + '~' + money(va.p75), t('report.p2575')) + '</div>';

@@ -417,6 +417,7 @@ registerMessages('zh', {
   'report.structure': '② 主导结构',
   'report.contributed': '贡献',
   'report.gmv': '成交额',
+  'report.mech': '机制卡',
   'report.hhiTier.dispersed': '分散竞争',
   'report.hhiTier.moderate': '中度集中',
   'report.hhiTier.oligopoly': '寡头集中',
