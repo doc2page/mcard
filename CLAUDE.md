@@ -26,8 +26,10 @@ npm test                              # node --test tests/**/*.test.js
 - **手动触发**：所有采集/交易由页面手动点击触发，无后台轮询（反风控）。冷却：market 8s / trades·orders·marketData 8s / cardLog·inventory 30s + `isRoundRunning` 锁 + randSleep 400-900ms。
 - **运行锁勿跨重启持久化**：`isRoundRunning` 是进程内瞬时态——启动时 `server.js` 的 `createStoreState` 强制重置为 false、`round=null`；`collector.js` 的 `startRound` 用 try/finally 兜底 `onRoundDone`（解锁）。否则一次采集崩溃会让锁卡 true 进 db，重启后 `triggerRefreshRound` 永远走 `queued` 分支、市场采集再也不触发（症状：市场卡片停旧快照，但行情/持有/挂单/掉落照常刷新）。
 - **since 两套别混**：掉落统计 since = 官方最新 25 条数据的最早时间（动态）；**用户画像消费维度**用固定 7/1（`PORTRAIT_SPAN_SINCE` 常量，app.js 顶部；前端没加载 dropStats.js，不能直接用其 `DROP_SINCE_DEFAULT`）。
-- **掉落统计双源 + 手动导入**：`dropStats.messages`（用户粘贴 message search 响应手动导入的全量历史）+ `feedCards`（feed 接口最新 25 条增量），`computeDropSummary(messages, feedCards, since, today)` 双源聚合。导入入口 `POST /api/drop-import`（dispatch `IMPORT_DROPS`），hero CTA 仅在 `rangeStart ≠ 2026-07-01`（`DROP_FULL_SINCE`，数据未补全）时显示。**双源勿重叠**：`feedCards` 只存 `createdDate > lastMsgDate`（messages 未覆盖的增量），否则与 messages 时间区间重叠会被聚合各算一遍导致重复（mergeDropFeed / importDropMessages / createStoreState 三处均维护此不变量）。
+- **掉落统计双源 + 手动导入**：`dropStats.messages`（用户粘贴 message search 响应手动导入的全量历史）+ `feedCards`（feed 接口最新 25 条增量），`computeDropSummary(messages, feedCards, since, today)` 双源聚合。导入入口 `POST /api/drop-import`（dispatch `IMPORT_DROPS`），hero CTA 仅在 message 接口数据未补全时显示：判断用 `msgTotal`（message 接口 total，存 `state.dropStats.msgTotal`）——`!msgTotal`（从未导入）或 `messages.length < msgTotal`（已导条数 < 接口总数）；**勿用 `rangeStart` 判断补全**（不可靠，曾导致老用户首导/重导补不上）。**双源勿重叠**：`feedCards` 只存 `createdDate > lastMsgDate`（messages 未覆盖的增量），否则与 messages 时间区间重叠会被聚合各算一遍导致重复（mergeDropFeed / importDropMessages / createStoreState 三处均维护此不变量）。
 - **掉落 dailyFull 日界**：`computeDropSummary`（stats.js）算 dailyFull / totalDays 的起止点必须截到日界 `slice(0,10)`——`since` 带时分（最早掉卡 `HH:MM:SS`）会让日循环每天偏移，`endMs`（当天 00:00）把当天柱子裁掉。
+- **市场分析报告**：`marketStats.js` 的 `analyzeMarket(sum)` 返回语言无关 tier key（`expand/sell/divergence/cool/flat/nodata`），文案走 i18n `report.*`；HTML 报告在 `app.js` 前端生成（单文件、新 tab 打开、可打印），**排除当天**（当天未结束、基准日 = 昨天）；机制卡（`provenance=mech`）与普通卡统一计入总 GMV，但**稀有度筛选排除机制卡**（归来源维度 `mechMatrix`，不计入 `rarityMatrix`）。
+- **i18n**：用户可见文案全走 `public/locales/{zh,en}.js`，`lang-bootstrap.js` 启动期定语言（浏览器/手动）；新增可见文案必须加 i18n key，不硬编码中文。主题同理走 `theme-bootstrap.js` + localStorage。
 - **设置存后端**：lockedCards 在 config；仅 theme/privacy 留前端 localStorage。
 - **不主动 Playwright 验证**：改完 rebuild + restart 后直接交用户验证，别主动开 Playwright 截图/测量。
 
@@ -39,8 +41,8 @@ npm test                              # node --test tests/**/*.test.js
 
 ## 关键文件
 
-- 后端 `src/`：`server.js`（挂 auth 中间件）、`lib/auth.js`（HMAC token + `requireAuth` + 白名单）、`routes/auth.js`（/login + /api/login + /api/logout）、`lib/collector.js`（采集 + 冷却；`ensureCardLogs` 在 `ensureDropStats` 内调用）、`state.js`
-- 前端 `public/`：`app.js`（主逻辑 + `PORTRAIT_SPAN_SINCE` + SSE `applyPatch` 增量 + 移动端折叠头注入 + `provColorClass`）、`app.css`（移动端 @media）、`login.html`（独立登录页，logo.png + 主题色按钮 + 语言自适应）、`dispatch.js`（15 type→REST）、`portrait.js`（画像趋势四档）、`marketStats.js`（extractFacets/filterTrades）、`dropStats.js`（后端共用，前端未加载）
+- 后端 `src/`：`server.js`（挂 auth 中间件）、`lib/auth.js`（HMAC token + `requireAuth` + 白名单）、`routes/auth.js`（/login + /api/login + /api/logout）、`routes/api.js`（业务 REST）/`routes/sse.js`（SSE 推送）、`lib/collector.js`（采集 + 冷却；`ensureCardLogs` 在 `ensureDropStats` 内调用）、`lib/stats.js`（`computeDropSummary` + 日界）、`lib/trader.js`（交易）、`lib/mteam.js`（M-TEAM 接口）、`lib/normalizers.js`/`lib/shared.js`（归一/共用）、`store.js`（SQLite 持久化）、`state.js`（进程内状态）
+- 前端 `public/`：`app.js`（主逻辑 + `PORTRAIT_SPAN_SINCE` + SSE `applyPatch` 增量 + 移动端折叠头注入 + `provColorClass` + 市场分析 HTML 报告生成）、`app.css`（移动端 @media）、`login.html`（独立登录页，logo.png + 主题色按钮 + 语言自适应）、`dispatch.js`（15 type→REST）、`portrait.js`（画像趋势四档）、`marketStats.js`（extractFacets/filterTrades + `analyzeMarket` 报告 tier 判定 + 价格分布直方图）、`dropStats.js`（后端共用，前端未加载）、`locales/{zh,en}.js`（i18n 文案）、`lang-bootstrap.js`（启动定语言）/`theme-bootstrap.js`（启动定主题）/`shared.js`（前端共用）
 - 部署：`docker-compose.yml`、`Dockerfile`、`.env`(gitignore)、`README.md`/`README.en.md`
 
 ## 鉴权链路
