@@ -20,9 +20,34 @@
 
 ## 快速开始
 
-在项目根目录：
+镜像已发布到 [Docker Hub](https://hub.docker.com/r/doc2page/mcard)（`doc2page/mcard`），两种方式任选：
+
+### ① 拉取镜像（推荐）
 
 ```bash
+docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.0
+```
+
+或 `docker-compose.yml`：
+
+```yaml
+services:
+  mcard:
+    image: doc2page/mcard:1.0.0
+    container_name: mcard
+    ports: ["31414:31414"]
+    volumes: ["./data:/app/data"]
+    environment:
+      AUTH_PASSWORD: "changeme"   # 留空 = 不启用鉴权
+    restart: unless-stopped
+```
+
+### ② 源码自建
+
+```bash
+git clone https://github.com/doc2page/mcard.git
+cd mcard
 docker compose up -d --build
 ```
 
@@ -46,9 +71,9 @@ docker compose up -d --build
 ## 常用命令
 
 ```bash
-docker compose up -d --build   # 构建并后台启动
+docker compose up -d            # 启动（拉镜像版）；源码自建用 up -d --build
 docker compose logs -f          # 查看日志
-docker compose restart          # 重启（改代码后：先 up --build 再 restart）
+docker compose restart          # 重启
 docker compose down             # 停止并删除容器（数据保留）
 ```
 
@@ -64,7 +89,7 @@ npm test       # 运行测试
 
 ## 说明
 
-- **构建走代理 / 运行不走代理**：`docker-compose.yml` 的 `build.args` 设了 `HTTP_PROXY`/`HTTPS_PROXY`（默认 `http://127.0.0.1:7890`，仅 build 阶段供 apt 装编译链 / npm 拉包使用，靠 `network: host` 访问宿主代理）；而容器运行时的 `environment` 不含任何代理变量，HTTP 请求直连 M-TEAM。换代理地址改 `build.args` 即可。
+- **构建走代理 / 运行不走代理**（仅源码自建相关，拉镜像可跳过）：`docker-compose.yml` 的 `build.args` 设了 `HTTP_PROXY`/`HTTPS_PROXY`（默认 `http://127.0.0.1:7890`，仅 build 阶段供 apt 装编译链 / npm 拉包使用，靠 `network: host` 访问宿主代理）；而容器运行时的 `environment` 不含任何代理变量，HTTP 请求直连 M-TEAM。换代理地址改 `build.args` 即可。
 - **纯手动触发**：所有数据采集、交易均由页面手动点击触发，无后台轮询。
 - **访问鉴权（可选）**：`docker-compose.yml` 设 `AUTH_PASSWORD` 即开启登录保护——所有页面 / API / SSE 都需密码登录（登录态 cookie 保持 30 天）；留空则不鉴权。**注意**：局域网 HTTP 下密码是明文传输的，要传输加密请在前面加 HTTPS 反代（Caddy/Nginx）。
 - **单用户**：API Key 是唯一的业务凭证（访问 M-TEAM），和访问密码相互独立。`HOST=0.0.0.0` 会监听所有网卡——建议部署在可信网络（家庭局域网、Tailscale 等）。
@@ -91,4 +116,4 @@ npm test       # 运行测试
 
 ## 许可
 
-私有项目，自用。
+[MIT](LICENSE) © 2026 doc2page

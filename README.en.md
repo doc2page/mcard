@@ -20,9 +20,34 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 
 ## Quick start
 
-From the project root:
+The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) (`doc2page/mcard`). Choose either method:
+
+### ① Pull the image (recommended)
 
 ```bash
+docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.0
+```
+
+Or `docker-compose.yml`:
+
+```yaml
+services:
+  mcard:
+    image: doc2page/mcard:1.0.0
+    container_name: mcard
+    ports: ["31414:31414"]
+    volumes: ["./data:/app/data"]
+    environment:
+      AUTH_PASSWORD: "changeme"   # empty = no auth
+    restart: unless-stopped
+```
+
+### ② Build from source
+
+```bash
+git clone https://github.com/doc2page/mcard.git
+cd mcard
 docker compose up -d --build
 ```
 
@@ -46,9 +71,9 @@ Data persists in `./data/mcard.db` — removing the container or rebuilding the 
 ## Common commands
 
 ```bash
-docker compose up -d --build   # build and start in background
+docker compose up -d            # start (image pull); for source build use up -d --build
 docker compose logs -f          # follow logs
-docker compose restart          # restart (after code changes: up --build first, then restart)
+docker compose restart          # restart
 docker compose down             # stop and remove container (data kept)
 ```
 
@@ -64,7 +89,7 @@ npm test       # run tests
 
 ## Notes
 
-- **Build via proxy / run without proxy**: `docker-compose.yml` sets `HTTP_PROXY`/`HTTPS_PROXY` in `build.args` (default `http://127.0.0.1:7890`, used only during build for the apt toolchain / npm packages, reachable via `network: host`); the runtime `environment` has no proxy vars, so HTTP requests connect directly to M-TEAM. To change the proxy, edit `build.args`.
+- **Build via proxy / run without proxy** (source-build only; image-pull users can skip): `docker-compose.yml` sets `HTTP_PROXY`/`HTTPS_PROXY` in `build.args` (default `http://127.0.0.1:7890`, used only during build for the apt toolchain / npm packages, reachable via `network: host`); the runtime `environment` has no proxy vars, so HTTP requests connect directly to M-TEAM. To change the proxy, edit `build.args`.
 - **Manual only**: all data fetching and trading are triggered by clicking in the UI; there is no background polling.
 - **Access auth (optional)**: set `AUTH_PASSWORD` in `docker-compose.yml` to enable login protection — all pages / API / SSE require a password (session cookie lasts 30 days); leave empty to disable. **Note**: passwords are sent in plain text over LAN HTTP; for encrypted transport put an HTTPS reverse proxy (Caddy/Nginx) in front.
 - **Single-user**: the API key is the only business credential (for M-TEAM), independent from the access password. `HOST=0.0.0.0` listens on all interfaces — deploy on a trusted network (home LAN, Tailscale, etc.).
@@ -91,4 +116,4 @@ npm test       # run tests
 
 ## License
 
-Private project, personal use.
+[MIT](LICENSE) © 2026 doc2page
