@@ -60,7 +60,7 @@ The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) 
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.1
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.2
 ```
 
 Or `docker-compose.yml`:
@@ -68,7 +68,7 @@ Or `docker-compose.yml`:
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.0.1
+    image: doc2page/mcard:1.0.2
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
