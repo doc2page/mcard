@@ -25,6 +25,33 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 - 🔑 **API key set via the UI** — stored in backend SQLite, never in the browser
 - 🔐 **Optional access auth** — HMAC token login protection (30-day cookie)
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/market.png" alt="Market"><br>
+  <b>Market</b> · listings · price · rarity distribution
+</p>
+
+<p align="center">
+  <img src="screenshots/market-data.png" alt="Market data"><br>
+  <b>Market data</b> · volume×price / price distribution / trend · one-click report
+</p>
+
+<p align="center">
+  <img src="screenshots/drop-stats.png" alt="Drop stats"><br>
+  <b>Drop stats</b> · incremental feed + manual import backfill
+</p>
+
+<p align="center">
+  <img src="screenshots/portrait.png" alt="User profile"><br>
+  <b>User profile</b> · spend trend (4-tier)
+</p>
+
+<p align="center">
+  <img src="screenshots/batch-modal.png" alt="Batch operations"><br>
+  <b>Batch operations</b> · bulk buy / sell (safety gate + budget pool)
+</p>
+
 ## Quick start
 
 The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) (`doc2page/mcard`). Choose either method:

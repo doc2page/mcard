@@ -25,6 +25,33 @@
 - 🔑 **API Key 经页面设置** —— 存储在后端 SQLite，不落浏览器
 - 🔐 **可选访问鉴权** —— HMAC token 登录保护（cookie 30 天）
 
+## 效果展示
+
+<p align="center">
+  <img src="screenshots/market.png" alt="市场行情"><br>
+  <b>市场行情</b> · 挂牌 · 价格 · 稀有度分布
+</p>
+
+<p align="center">
+  <img src="screenshots/market-data.png" alt="市场数据"><br>
+  <b>市场数据</b> · 量价叠加 / 价格分布 / 走势 · 一键分析报告
+</p>
+
+<p align="center">
+  <img src="screenshots/drop-stats.png" alt="掉落统计"><br>
+  <b>掉落统计</b> · Feed 增量 + 手动导入补全历史
+</p>
+
+<p align="center">
+  <img src="screenshots/portrait.png" alt="用户画像"><br>
+  <b>用户画像</b> · 消费维度趋势四档
+</p>
+
+<p align="center">
+  <img src="screenshots/batch-modal.png" alt="批量操作"><br>
+  <b>批量操作</b> · 批量买入 / 卖出（安全门 + 预算池）
+</p>
+
 ## 快速开始
 
 镜像已发布到 [Docker Hub](https://hub.docker.com/r/doc2page/mcard)（`doc2page/mcard`），两种方式任选：
