@@ -1,8 +1,14 @@
 # MCard Server
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/doc2page/mcard.svg?style=flat-square)](https://hub.docker.com/r/doc2page/mcard)
+[![Image](https://img.shields.io/docker/v/doc2page/mcard.svg?style=flat-square&label=image)](https://hub.docker.com/r/doc2page/mcard/tags)
+[![Release](https://img.shields.io/github/v/release/doc2page/mcard.svg?style=flat-square)](https://github.com/doc2page/mcard/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Node](https://img.shields.io/badge/node-20-brightgreen.svg?style=flat-square)](https://nodejs.org)
+
 > M-TEAM card market helper · self-hosted web service (mobile-friendly)
->
-> English · [中文](README.md)
+
+English · [中文](README.md)
 
 A Chrome extension rebuilt as a Dockerized web service for single-user self-hosting. Backend: Node.js + Express + SQLite. Frontend: vanilla JavaScript (no framework). Start with one `docker compose` command; works in both phone and desktop browsers.
 
@@ -11,12 +17,13 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 - 💳 **Inventory** — browse owned cards; manually lock cards (locked cards are excluded from trading)
 - 📊 **Market** — manually fetch listings, prices, and rarity distribution
 - 🛒 **Trading** — buy / sell / cancel orders (with safety gate and budget pool)
-- 📈 **Market data** — volume×price / price distribution / hourly trend charts with time-window switch
-- 📉 **Drop stats** — incremental stats from the feed (official API returns only the latest 25 records; start date follows the actual data)
-- 🎟️ **Mana voucher log** — open-card returns / distribution / lucky multiplier (from credit/logs)
+- 📈 **Market data** — volume×price / price distribution / hourly trend charts with time-window switch + one-click analysis report
+- 📉 **Drop stats** — incremental stats from the feed (official API returns only the latest 25 records; manual import to backfill history)
+- 🎟️ **Mana voucher log** — open-card returns / distribution / lucky multiplier
 - 🔖 **Order book** — query live listings per card
 - 📱 **Mobile-first** — drawer navigation, collapsible stat cards, responsive across phone / tablet / desktop
 - 🔑 **API key set via the UI** — stored in backend SQLite, never in the browser
+- 🔐 **Optional access auth** — HMAC token login protection (30-day cookie)
 
 ## Quick start
 
@@ -53,7 +60,7 @@ docker compose up -d --build
 
 Open **http://localhost:31414** in a browser. On first visit, enter your M-TEAM API key (it is verified and triggers an initial full refresh).
 
-> **Mobile**: connect your phone to the same Wi-Fi and open **http://<your-pc-lan-ip>:31414** (e.g. `http://192.168.1.10:31414`).
+> 📱 **Mobile**: connect your phone to the same Wi-Fi and open **http://<your-pc-lan-ip>:31414** (e.g. `http://192.168.1.10:31414`).
 
 ## Configuration
 
@@ -82,7 +89,6 @@ docker compose down             # stop and remove container (data kept)
 ```bash
 npm install
 npm start      # listens on 127.0.0.1:31414 by default
-npm test       # run tests
 ```
 
 > `better-sqlite3` is a native module — installing it locally requires `python3` / `make` / `g++` (a build toolchain).
@@ -97,21 +103,24 @@ npm test       # run tests
 ## Project structure
 
 ```
-├── docker-compose.yml      # one-command orchestration
-├── Dockerfile              # Node 20 + better-sqlite3 build
-├── package.json
-├── src/                    # backend
-│   ├── server.js           # Express entry
+mcard/
+├── src/                    # backend (Node + Express + SQLite)
+│   ├── server.js           # entry + auth middleware
 │   ├── store.js            # SQLite persistence
-│   ├── state.js            # state + subscriptions
-│   ├── routes/             # REST API + SSE
-│   └── lib/                # mteam / collector / trader
-├── public/                 # frontend (vanilla JS)
+│   ├── state.js            # in-process state + subscriptions
+│   ├── routes/             # REST · SSE · auth
+│   └── lib/                # mteam · collector · trader · stats
+├── public/                 # frontend (vanilla JS, no framework)
 │   ├── index.html
-│   ├── app.js / app.css
-│   └── dispatch.js
-├── tests/
-└── data/                   # SQLite (generated at runtime, gitignored)
+│   ├── app.js / app.css    # main logic + styles
+│   ├── dispatch.js         # type → REST mapping
+│   ├── marketStats.js      # market analysis + report
+│   ├── portrait.js         # user profile
+│   └── locales/            # i18n (zh / en)
+├── Dockerfile              # Node 20 + better-sqlite3
+├── docker-compose.yml      # one-command orchestration
+├── LICENSE                 # MIT
+└── package.json
 ```
 
 ## License
