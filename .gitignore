@@ -152,6 +152,7 @@ bower_components/
 
 # === Claude Code ===
 .claude/
+CLAUDE.md
 
 # === 项目数据 / 缓存 ===
 data/
