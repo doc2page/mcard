@@ -99,6 +99,7 @@ Everything lives in `docker-compose.yml`:
 | Volume | `./data:/app/data` | SQLite database (API key + cache); back up the whole `data/` dir |
 | Restart | `unless-stopped` | auto-restart on crash; won't restart after manual stop |
 | Access password | `AUTH_PASSWORD=""` | empty = no auth; set a password to require login (see "Access auth" below) |
+| Timezone | `Asia/Shanghai` | drop-stats day boundary follows this TZ (M-TEAM data is Beijing time). Override via `.env` `TZ=`, e.g. `TZ=UTC` |
 
 Data persists in `./data/mcard.db` — removing the container or rebuilding the image won't lose your API key or cached data.
 

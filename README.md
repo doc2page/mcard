@@ -99,6 +99,7 @@ docker compose up -d --build
 | 数据卷 | `./data:/app/data` | SQLite 数据库（API Key + 缓存），备份整个 `data/` 目录即可 |
 | 重启策略 | `unless-stopped` | 崩溃自动重启，手动停止则不重启 |
 | 访问密码 | `AUTH_PASSWORD=""` | 留空=不鉴权；填密码则访问需登录（见下方「访问鉴权」）|
+| 时区 | `Asia/Shanghai` | 掉落统计日界按此时区（M-TEAM 数据为北京时间）。改时区在 `.env` 设 `TZ=`，如 `TZ=UTC` |
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 

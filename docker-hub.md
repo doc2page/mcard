@@ -63,6 +63,7 @@ docker compose up -d
 | 端口 | `31414` | `-p 8080:31414` 换端口 |
 | 数据卷 | `/app/data` | SQLite（API Key + 缓存），备份整个 `data/` 目录 |
 | `AUTH_PASSWORD` | 空 | 留空 = 完全开放；设密码则需登录（cookie 30 天） |
+| 时区 | `Asia/Shanghai` | 掉落日界按此时区（M-TEAM 数据为北京时间）。`.env` 设 `TZ=` 覆盖 |
 | 重启 | `unless-stopped` | 崩溃自启，手动停止不重启 |
 
 数据持久化在 `data/mcard.db`，**删容器 / 重建镜像都不丢** API Key 与已采集数据。
