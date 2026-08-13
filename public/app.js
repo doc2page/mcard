@@ -766,6 +766,7 @@ function buildCard(it, delay, myAsks) {
     buyBtn.disabled = true;
     buyBtn.classList.add('own-listing');
     buyBtn.title = t('card.ownListing');
+    card.dataset.ownListing = '1';   // 标记自挂单：批量选择据此禁选（onBatchCardClick 拦截 + 隐藏勾选框）
   }
   buyBtn.onclick = (e) => { e.stopPropagation(); if (!buyBtn.disabled) onBuy(it); };
   append(priceRow, priceEl, buyBtn);
@@ -3590,6 +3591,11 @@ function batchIdOf(card) {
 
 // 点卡片 toggle 选中；view 由 card builder 传入。第一次点击进入选择态。
 function onBatchCardClick(card, cardEl, view) {
+  // 市场自挂单不可批量选中（与单卡购买灰显一致，避免自买）
+  if (view === 'market' && cardEl && cardEl.dataset.ownListing) {
+    showToast(t('card.ownListing'));
+    return;
+  }
   if (batchInView && batchInView !== view) batchSelected = new Set();  // 跨 view 不混选
   batchInView = view;
   var id = batchIdOf(card);

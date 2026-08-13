@@ -1796,6 +1796,7 @@ body.no-token .layout > main { display: none !important; }
 .batch-mode:hover .batch-check { opacity: 1; }
 .batch-check.checked { opacity: 1; background: var(--accent); border-color: var(--accent); }
 .batch-check.checked::after { content: '✓'; color: #fff; font-size: 12px; font-weight: 700; }
+.card[data-own-listing="1"] .batch-check { display: none; }  /* 自挂单不可批量选：隐藏勾选框 */
 .batch-mode.batch-locked { opacity: 0.4; }
 /* 手动锁：磨砂遮罩 + 解锁按钮（.card 已 position:relative + overflow:hidden + border-radius:10px） */
 .inventory-card.manual-locked:hover { transform: none; border-color: var(--border); box-shadow: none; }  /* 锁定卡：禁 hover 上浮/边框变色/阴影 */
