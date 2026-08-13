@@ -21,5 +21,6 @@ services:
     environment:
       HOST: "0.0.0.0"         # 监听所有网卡，便于局域网 / 移动端访问
       PORT: "31414"           # 运行时不设 HTTP_PROXY → 容器直连 M-TEAM，不走代理
+      TZ: ${TZ:-Asia/Shanghai}   # 时区：掉落日界按此时区（M-TEAM 数据为北京时间，默认 Asia/Shanghai）。可在 .env 设 TZ 覆盖
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}  # 访问密码：留空=不启用；设了则需登录。建议在 .env 文件设（不入库）
     restart: unless-stopped

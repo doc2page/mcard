@@ -2,7 +2,7 @@
 FROM node:20-slim
 
 # better-sqlite3 是 native 模块，编译需 python3/make/g++
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,6 +19,8 @@ RUN mkdir -p data
 # 容器内绑所有接口（安全靠宿主网络/反代/Tailscale；见 spec 第 14 节）
 ENV HOST=0.0.0.0
 ENV PORT=31414
+# 默认时区（docker-compose TZ 可覆盖）。tzdata 已装；掉落日界按此时区，须与 M-TEAM 数据时区（北京）一致。
+ENV TZ=Asia/Shanghai
 
 VOLUME /app/data
 EXPOSE 31414

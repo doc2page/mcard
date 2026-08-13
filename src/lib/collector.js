@@ -459,6 +459,8 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   }
 
   function _todayStr() {
+    // 本地日界：靠容器 TZ 环境变量（docker-compose TZ=Asia/Shanghai 默认；tzdata 已装）。
+    // createdDate 是 M-TEAM 本地时间串，TZ 须与之同区（默认上海=北京 UTC+8），否则凌晨跨日时当天柱子被裁。
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
