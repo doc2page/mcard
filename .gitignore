@@ -154,9 +154,8 @@ bower_components/
 .claude/
 
 # === 项目数据 / 缓存 ===
-data/*.db
-data/*.db-shm
-data/*.db-wal
+data/
+tests/
 .playwright-mcp/
 
 # === src/lib 例外 ===
