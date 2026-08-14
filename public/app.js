@@ -156,6 +156,7 @@ function renderStatus() {
   if (dsc) dsc.textContent = (state.dropStats && state.dropStats.summary && state.dropStats.summary.totalCards) || 0;
   const mdc = $('marketDataCount');
   if (mdc) mdc.textContent = (state.marketHistory && state.marketHistory.length) || 0;
+  const cbc = $('cardBookCount'); if (cbc) cbc.textContent = cardBookFilmCount();
   // 令牌失效弹窗（一次性/会话内）：background 在 401 时把 stats.lastError='api_key_invalid'，
   // 此处检测到即弹令牌模态窗引导重输；用户保存成功后清 guard，避免重复弹。
   if (state.stats && state.stats.lastError === 'api_key_invalid' && !apiKeyInvalidShown) {
@@ -285,6 +286,8 @@ function renderConfig() {
   if (oBtn) oBtn.onclick = () => { toggleView('orders'); send({ type: 'LOAD_ORDERS' }); };
   const invBtn = $('inventoryBtn');
   if (invBtn) invBtn.onclick = () => { toggleView('inventory'); send({ type: 'LOAD_INVENTORY' }); };
+  const cbkBtn = $('cardBookBtn');
+  if (cbkBtn) cbkBtn.onclick = () => { toggleView('cardBook'); send({ type: 'LOAD_INVENTORY' }); send({ type: 'LOAD_ORDERS' }); };
   const dsBtn = $('dropStatsBtn');
   if (dsBtn) dsBtn.onclick = () => { toggleView('dropStats'); send({ type: 'LOAD_DROP_STATS' }); };
   const mdBtn = $('marketDataBtn');
@@ -308,6 +311,7 @@ function renderLive(changedKeys) {
   if (view === 'trades') { if (touched(['buyHistory'])) renderTrades(); }
   else if (view === 'orders') { if (touched(['ordersAll', 'ordersTotal'])) renderOrders(); }
   else if (view === 'inventory') { if (touched(['inventory', 'mechInventory'])) renderInventory(); }
+  else if (view === 'cardBook') { if (touched(['inventory', 'ordersAll'])) renderCardBook(); }
   else if (view === 'dropStats') { if (touched(['dropStats', 'cardLogs', 'cardLogSummary'])) renderDropStats(); }
   else if (view === 'marketData') { if (touched(['marketHistory'])) renderMarketData(); }
   else if (view === 'portrait') { if (touched(['profile'])) renderPortraitView(); }
@@ -320,10 +324,11 @@ function renderToolbar() {
   const isTrades = view === 'trades';
   const isOrders = view === 'orders';
   const isInventory = view === 'inventory';
+  const isCardBook = view === 'cardBook';
   const isDropStats = view === 'dropStats';
   const isPortrait = view === 'portrait';
   const isMarketData = view === 'marketData';
-  const isSub = isTrades || isOrders || isInventory || isDropStats || isPortrait || isMarketData; // 子视图：显示返回、隐藏排序
+  const isSub = isTrades || isOrders || isInventory || isCardBook || isDropStats || isPortrait || isMarketData; // 子视图：显示返回、隐藏排序
   const back = $('backToMarketBtn');
   const modeBox = $('modeBox');
   const mf = $('marketFilter');
@@ -338,6 +343,8 @@ function renderToolbar() {
   if (ob) ob.classList.toggle('active', isOrders);
   const ib = $('inventoryBtn');
   if (ib) ib.classList.toggle('active', isInventory);
+  const cbb = $('cardBookBtn');
+  if (cbb) cbb.classList.toggle('active', isCardBook);
   const dsb = $('dropStatsBtn');
   if (dsb) dsb.classList.toggle('active', isDropStats);
   const mdb = $('marketDataBtn');
@@ -356,6 +363,10 @@ function renderToolbar() {
   if (ist && !isInventory) ist.style.display = 'none';
   const isc = $('inventorySearch');
   if (isc) isc.style.display = isInventory ? '' : 'none';
+  const cbv = $('cardBookView');
+  if (cbv) cbv.style.display = isCardBook ? '' : 'none';
+  const rs = $('resultSummary');
+  if (rs) rs.style.visibility = isCardBook ? 'hidden' : '';  // 卡册不写结果摘要：visibility 保占位（display:none 会让 space-between 失衡、返回按钮跳到左侧）
   const dsv = $('dropStatsView');
   if (dsv) dsv.style.display = isDropStats ? '' : 'none';
   const pv = $('portraitView');
@@ -365,8 +376,168 @@ function renderToolbar() {
   const tfb = $('titleFilterBox');
   if (tfb) tfb.style.display = isSub ? 'none' : '';  // 称号筛选仅市场 view 显示
   const grid = $('grid');
-  if (grid) grid.style.display = (isDropStats || isPortrait || isMarketData) ? 'none' : ''; // 掉落/画像/市场数据视图隐藏卡牌网格
+  if (grid) grid.style.display = (isDropStats || isPortrait || isMarketData || isCardBook) ? 'none' : ''; // 掉落/画像/市场数据/卡册视图隐藏卡牌网格
 }
+// ============ 我的卡册：持有+当前挂单 按影片聚合稀有度/称号（机制卡不计） ============
+const CB_TITLE_WEIGHT = { '傳火': 1, '薪火': 2, '星火': 3, '殘焰': 4, '薪王': 5 }; // 排序加权：薪王>殘焰>星火>薪火>傳火
+function computeCardBook() {
+  const films = new Map();
+  function add(c, listed) {
+    if (!c || !c.filmId || c.provenance === 'mech') return;   // 机制卡不统计
+    let f = films.get(c.filmId);
+    if (!f) { f = { filmId: c.filmId, filmName: c.filmName || '', poster: c.poster || '', rarities: {}, titles: {} }; films.set(c.filmId, f); }
+    const r = f.rarities[c.rarity] || (f.rarities[c.rarity] = {});        // { 稀有度: { 称号: {hold,listed} } }
+    const tk = c.title || '';
+    const b = r[tk] || (r[tk] = { hold: 0, listed: 0 });
+    b[listed ? 'listed' : 'hold']++;
+    if (tk) f.titles[tk] = true;                                          // 卡片级称号集合（加权排序每称号只计一次）
+  }
+  const invIds = new Set();
+  (state.inventory || []).forEach((c) => { invIds.add(String(c.cardId || '')); add(c, false); });
+  ((state.ordersAll) || []).filter((o) => o.status === 'open' && o.side === 'sell').forEach((o) => {
+    if (invIds.has(String(o.cardId || ''))) return;                       // 与持有重复（理论不重叠，防重）
+    add(o, true);
+  });
+  const arr = Array.from(films.values());
+  for (const f of arr) {
+    f.rarityCount = Object.keys(f.rarities).length;
+    f.titleScore = Object.keys(f.titles).reduce((s, tk) => s + (CB_TITLE_WEIGHT[tk] || 0), 0);
+  }
+  // 排序：稀有度种数降序 → 称号加权分降序（每称号计一次）→ 片名
+  arr.sort((a, b) => b.rarityCount - a.rarityCount || b.titleScore - a.titleScore || String(a.filmName).localeCompare(String(b.filmName)));
+  return arr;
+}
+
+// 卡册称号固定列：从低到高（傳火→薪王），每称号下双格 = 左持有 右挂单
+const CB_TITLES = ['傳火', '薪火', '星火', '殘焰', '薪王'];
+
+// 卡册图片视口管理：滚出视口（rootMargin 外沿）即卸载 src——浏览器可回收解码位图（曾致「越滚内存越大」，上百张 poster 解码缓存不释放）；
+// 进视口恢复加载。签名防重绘保证 DOM 稳定，observer 长期有效。
+let _cbImgObs = null;
+function cbImgObserver() {
+  if (_cbImgObs) return _cbImgObs;
+  _cbImgObs = new IntersectionObserver((ents) => {
+    for (const e of ents) {
+      const img = e.target;
+      if (e.isIntersecting) {
+        if (!img.getAttribute('src') && img.dataset.src) img.src = img.dataset.src;
+      } else if (img.getAttribute('src')) {
+        img.removeAttribute('src');   // 卸载解码位图；dataset.src 保留供回滚恢复
+      }
+    }
+  }, { rootMargin: '300px 0px' });
+  return _cbImgObs;
+}
+
+function buildCardBookCard(f, delay) {
+  const card = el('div', { cls: 'cb-card' });
+  card.style.animationDelay = delay + 'ms';
+  // 左：poster（反色卡上的藏品图，同其它 view 规格）
+  const pw = el('div', { cls: 'cb-poster' });
+  const name = f.filmName || '?';
+  const fb = el('div', { cls: 'poster-fallback', text: name.slice(0, 1) });
+  fb.style.display = 'none';
+  if (f.poster) {
+    const img = el('img', { attrs: { alt: name, decoding: 'async' } });
+    img.dataset.src = f.poster;           // src 由视口管理器按需加载/卸载（替代 loading=lazy）
+    img.style.opacity = '0';
+    img.style.transition = 'opacity .25s';
+    img.onload = () => { img.style.opacity = '1'; };
+    img.onerror = () => { img.remove(); fb.style.display = 'grid'; };
+    cbImgObserver().observe(img);
+    pw.appendChild(img);
+  } else fb.style.display = 'grid';
+  pw.appendChild(fb);
+  // 卡片右上角：加入定向搜索（复用市场定向 tag：addSearchTag 去重+持久化+自动查询；不跳转 view）
+  const sb = el('button', { cls: 'cb-search-btn', attrs: { type: 'button', title: t('cardBook.addSearch'), 'aria-label': t('cardBook.addSearch') } });
+  const sbSvg = svgEl('svg', { attrs: { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' } });
+  sbSvg.appendChild(svgEl('circle', { attrs: { cx: 7, cy: 7, r: 4.6, stroke: 'currentColor', 'stroke-width': 1.6 } }));
+  sbSvg.appendChild(svgEl('path', { attrs: { d: 'M10.4 10.4L13.8 13.8', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' } }));
+  sb.appendChild(sbSvg);
+  sb.onclick = (e) => {
+    e.stopPropagation();
+    const cur = (state.config && state.config.searchTags) || [];
+    if (cur.indexOf(name) !== -1) { showToast(t('cardBook.dupeSearch'), 'info'); return; }
+    addSearchTag(name);
+    showToast(t('cardBook.addedSearch', { name: name }), 'success');
+  };
+  // 右：片名（顶与 poster 齐）+ 5 行稀有度（均匀分布到 poster 底）；每行 = 双框稀有度徽章 + 5 称号×双格矩阵
+  const right = el('div', { cls: 'cb-right' });
+  right.appendChild(el('div', { cls: 'cb-name', attrs: { title: name }, text: name }));
+  const rows = el('div', { cls: 'cb-rows' });
+  for (const r of RARITIES) {
+    const titles = f.rarities[r];
+    const row = el('div', { cls: 'cb-row' + (titles ? '' : ' cb-empty') });  // cb-empty：勿用 empty（与全局空态 .empty 大 padding 冲突）
+    row.appendChild(el('span', { cls: 'cb-r r-' + r, text: r }));
+    const groups = el('div', { cls: 'cb-groups' });
+    for (const tk of CB_TITLES) {
+      const b = (titles && titles[tk]) || { hold: 0, listed: 0 };
+      // 该稀有度下没有此称号 → 整组（名+双格）统一暗淡，与有量的组拉开层级，一眼看清有哪些
+      const g = el('div', { cls: 'cb-tg' + ((b.hold || b.listed) ? '' : ' cb-none') });
+      g.appendChild(el('div', { cls: 'cb-tn ' + (TITLE_TIER[tk] || 'tt-5'), text: tk }));
+      const cells = el('div', { cls: 'cb-cells' });
+      cells.appendChild(el('span', { cls: 'cb-cell hold' + (b.hold ? '' : ' zero'), text: String(b.hold) }));
+      cells.appendChild(el('span', { cls: 'cb-cell sale' + (b.listed ? '' : ' zero'), text: String(b.listed) }));
+      append(g, cells);
+      groups.appendChild(g);
+    }
+    append(row, groups);
+    rows.appendChild(row);
+  }
+  append(right, rows);
+  append(card, pw, right, sb);
+  return card;
+}
+
+// 侧栏计数用轻量影片数（不跑 computeCardBook 全量聚合——renderStatus 每次 renderLive 都执行）
+function cardBookFilmCount() {
+  const s = new Set();
+  for (const c of (state.inventory || [])) if (c.filmId && c.provenance !== 'mech') s.add(c.filmId);
+  for (const o of (state.ordersAll || [])) if (o.status === 'open' && o.side === 'sell' && o.filmId && o.provenance !== 'mech') s.add(o.filmId);
+  return s.size;
+}
+
+let _cbRenderToken = 0;  // 渲染令牌：新渲染请求使旧分片任务作废（防过期批次与新渲染竞争写同一 grid）
+function renderCardBook() {
+  const box = $('cardBookView');
+  if (!box) return;
+  const arr = computeCardBook();
+  // 数据签名：结构未变不重建（SSE 高频 patch 曾致 DOM/img 全量反复重建 → 解码内存峰值叠高、页面卡）。
+  // sig 拼入当前语言：setLang→renderAll 时语言变化要穿透签名重建（图例等 t() 固化文案才能实时切换）
+  const sig = getI18nLang() + '::' + arr.map((f) => f.filmId + ':' + RARITIES.filter((r) => f.rarities[r]).map((r) => r + Object.keys(f.rarities[r]).filter((tk) => tk).map((tk) => tk + f.rarities[r][tk].hold + '/' + f.rarities[r][tk].listed).join(',')).join(';')).join('|');
+  if (box._sig === sig) return;
+  box._sig = sig;
+  _cbRenderToken++;
+  const token = _cbRenderToken;
+  box.replaceChildren();
+  if (!arr.length) { box.appendChild(el('div', { cls: 'drop-empty', text: t('cardBook.empty') })); return; }
+  // 图例：双格语义（左持有 右挂单）+ 称号由低到高
+  const legend = el('div', { cls: 'cb-legend' });
+  append(legend,
+    el('span', { cls: 'cb-lg-cell hold', text: t('cardBook.hold') }),
+    el('span', { cls: 'cb-lg-cell sale', text: t('cardBook.listed') }),
+    el('span', { cls: 'cb-lg-note', text: t('cardBook.legendNote') }));
+  box.appendChild(legend);
+  const grid = el('div', { cls: 'cb-grid' });
+  box.appendChild(grid);
+  if (arr.length <= 40) {
+    // 卡少：同步建（保留 stagger 入场动画）
+    arr.forEach((f, i) => grid.appendChild(buildCardBookCard(f, Math.min(i, 20) * 25)));
+    return;
+  }
+  // 卡多：rAF 分片渲染——上万节点单帧同步插入会卡死主线程几百 ms；每帧一批 + DocumentFragment 批量插，首帧即出首屏
+  grid.classList.add('no-anim');
+  const CHUNK = 24;
+  let i = 0;
+  (function fill() {
+    if (token !== _cbRenderToken) return;  // 已有更新的渲染请求，本批次作废
+    const frag = document.createDocumentFragment();
+    for (let end = Math.min(i + CHUNK, arr.length); i < end; i++) frag.appendChild(buildCardBookCard(arr[i], 0));
+    grid.appendChild(frag);
+    if (i < arr.length) requestAnimationFrame(fill);
+  })();
+}
+
 function toggleView(v) {
   view = v;
   document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）

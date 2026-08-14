@@ -1014,6 +1014,95 @@ button.stat.active .stat-val { color: var(--accent); }
 /* 浅色模式：所有称号字体变白（与薪王一致） */
 [data-theme="light"] .title-tag { color: #fff; }
 
+/* ============ 我的卡册（按影片聚合稀有度/称号） ============
+   反色收藏卡：直接取系统主题「对侧」背景/文字/边线变量（dark 模式卡=light 主题 surface 系，反之亦然），随系统主题自动一致。
+   局部色板 --cb-* 与卡内 --r-* 覆盖都限定在 .cb-card 作用域，不影响全局。 */
+.cb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(470px, 1fr)); gap: 14px; }
+.cb-card {
+  --cb-bg: #ffffff;      /* = light 主题 --surface */
+  --cb-ink: #1a1f2b;     /* = light 主题 --text */
+  --cb-sub: #6f7689;     /* = --muted（两主题同值） */
+  --cb-line: #d8dde6;    /* = light 主题 --border */
+  --cb-hold: #1f6e43;    /* 持有格：墨绿 */
+  --cb-sale: #b06a00;    /* 挂单格：金 */
+  --cb-sale-ink: #fff;
+  /* 稀有度色取「对侧」主题色（反色底上保证可读） */
+  --r-UR: #c07a35; --r-SSR: #a0801f; --r-SR: #7d55bd; --r-R: #4a79ad; --r-N: #59606b;
+  display: flex; gap: 14px;
+  position: relative;   /* 供右上角定向搜索按钮定位 */
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--cb-bg);
+  color: var(--cb-ink);
+  border: 1px solid var(--cb-line);
+  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.55);
+  animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+[data-theme="light"] .cb-card {
+  --cb-bg: #13161d;      /* = dark 主题 --surface */
+  --cb-ink: #eef0f5;     /* = dark 主题 --text */
+  --cb-line: #262b37;    /* = dark 主题 --border */
+  --cb-hold: #2f8a58;
+  --cb-sale: #f5a623;
+  --cb-sale-ink: #241c10;
+  --r-UR: #ffb070; --r-SSR: #efd79f; --r-SR: #c6a2ee; --r-R: #8fb6e0; --r-N: #828b96;
+}
+.cb-card:hover { transform: translateY(-2px); box-shadow: 0 18px 34px -18px rgba(0, 0, 0, 0.6); }
+/* 屏外卡片跳过渲染/布局/绘制（滚动性能；卡片高度统一 ~292px，估寸不会引起跳变） */
+.cb-card { content-visibility: auto; contain-intrinsic-size: auto 292px; }
+.cb-grid.no-anim .cb-card { animation: none; }  /* 卡多（>40）关入场动画 */
+/* poster 与其它 view 卡片同规格：2:3、列宽 176px。
+   align-self 必须 flex-start：flex 默认 stretch 会把 poster 拉到行内最高卡的高度，aspect-ratio 随之失效（曾出现 618px 高 poster） */
+.cb-poster { position: relative; flex: 0 0 176px; width: 176px; aspect-ratio: 2 / 3; align-self: flex-start; border-radius: 10px; overflow: hidden; background: var(--cb-line); border: 1px solid var(--cb-line); }
+.cb-poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 卡片右上角「加入定向搜索」：无底纯图标，色取卡面墨色（--cb-ink = 卡底反色，随主题反转） */
+.cb-search-btn {
+  position: absolute; top: 8px; right: 10px; z-index: 3;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: none; background: none; padding: 0;
+  color: var(--cb-ink);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s;
+}
+.cb-search-btn:hover { opacity: 1; transform: scale(1.12); color: var(--cb-sale); }
+.cb-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }  /* 高度随 poster（264）；行均匀分布由 cb-rows 承担 */
+.cb-name { font-size: 16px; font-weight: 800; line-height: 1.15; letter-spacing: 0.01em; color: var(--cb-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 2px; }  /* 片名：顶部，与 poster 顶水平 */
+.cb-rows { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 10px 0 3px; }  /* 5 行在片名下 → poster 底之间均匀分布 */
+.cb-row { display: flex; align-items: center; gap: 8px; }
+.cb-row.cb-empty { opacity: 0.28; }  /* 缺失稀有度：整行淡化。类名勿用 empty——会命中全局空态 .empty{padding:80px} */
+/* 双框稀有度徽章：外框 + 卡底缝隙 + 内框（证书双线语言），分隔稀有度与称号区 */
+.cb-r { flex: 0 0 38px; font-size: 11px; font-weight: 800; text-align: center; padding: 3px 0; border-radius: 7px; color: var(--rc); border: 1px solid var(--rc); box-shadow: inset 0 0 0 2px var(--cb-bg), inset 0 0 0 3px var(--rc); background: color-mix(in srgb, var(--rc) 8%, transparent); }
+.cb-r.r-UR { --rc: var(--r-UR); }
+.cb-r.r-SSR { --rc: var(--r-SSR); }
+.cb-r.r-SR { --rc: var(--r-SR); }
+.cb-r.r-R { --rc: var(--r-R); }
+.cb-r.r-N { --rc: var(--r-N); }
+/* 称号×双格矩阵：5 称号固定列（低→高），每称号下 左持有 右挂单 */
+.cb-groups { flex: 1; min-width: 0; display: flex; gap: 5px; }
+.cb-tg { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.cb-tg.cb-none { opacity: 0.22; }  /* 该稀有度下无此称号：整组暗淡（与 cb-empty 行同层级视觉） */
+.cb-tn { font-size: 9px; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; }
+.cb-tn.tt-1, .cb-tn.tt-2, .cb-tn.tt-3 { color: var(--cb-sub); }
+.cb-tn.tt-4 { color: #7a5bd0; }
+[data-theme="light"] .cb-tn.tt-4 { color: #b3a6ff; }
+.cb-tn.tt-5 { color: var(--cb-sale); }
+.cb-cells { display: flex; border-radius: 5px; overflow: hidden; }
+.cb-cell { min-width: 17px; padding: 2px 3px; font-size: 11px; font-weight: 800; line-height: 1.45; text-align: center; font-variant-numeric: tabular-nums; }
+.cb-cell.hold { background: var(--cb-hold); color: #fff; }
+.cb-cell.sale { background: var(--cb-sale); color: var(--cb-sale-ink); }
+.cb-cell.zero { opacity: 0.22; }  /* 0 值极淡：有量的格子一眼跳出（热力语义） */
+/* 图例（卡片外，固定双主题色） */
+.cb-legend { display: flex; align-items: center; gap: 8px; margin: 0 2px 12px; font-size: 11px; color: var(--muted); }
+.cb-lg-cell { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
+.cb-lg-cell.hold { background: #1f6e43; color: #fff; }
+.cb-lg-cell.sale { background: #b06a00; color: #fff; }
+[data-theme="light"] .cb-lg-cell.hold { background: #2f8a58; }
+[data-theme="light"] .cb-lg-cell.sale { background: #f5a623; color: #241c10; }
+.cb-lg-note { opacity: 0.85; }
+
 /* 卡片右上角跳转按钮（叠在 poster 上） */
 .ca-open {
   position: absolute; top: 8px; right: 8px; z-index: 3;
@@ -1571,6 +1660,18 @@ body.no-token .layout > main { display: none !important; }
   .pt-chart-row { grid-template-columns: 1fr; }
   .pt-panel-grid { grid-template-columns: repeat(2, 1fr); }
   .pt-nickname { font-size: 22px; }
+  /* 我的卡册：单列紧凑（poster 对齐移动端卡片 115px；矩阵间距压缩防溢出，flex 收缩自适应屏宽） */
+  .cb-grid { grid-template-columns: 1fr; gap: 10px; }
+  .cb-card { padding: 8px; gap: 8px; border-radius: 13px; contain-intrinsic-size: auto 188px; }
+  .cb-poster { flex-basis: 115px; width: 115px; border-radius: 8px; }
+  .cb-name { font-size: 14px; }
+  .cb-rows { padding: 6px 0 2px; }
+  .cb-row { gap: 5px; }
+  .cb-r { flex-basis: 30px; font-size: 10px; padding: 2px 0; border-radius: 6px; }
+  .cb-groups { gap: 2px; }
+  .cb-tn { font-size: 8px; letter-spacing: 0; }
+  .cb-cell { min-width: 13px; font-size: 10px; padding: 1px; }
+  .cb-legend { font-size: 10px; margin-bottom: 8px; gap: 6px; flex-wrap: wrap; }
 }
 @media (max-width: 540px) {
   .portrait-kpi { grid-template-columns: 1fr; }
