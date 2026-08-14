@@ -2082,14 +2082,6 @@ body.no-token .layout > main { display: none !important; }
     repeating-linear-gradient(45deg, transparent 0 10px, rgba(255, 255, 255, 0.025) 10px 12px),
     var(--surface-2);
 }
-.sp-emblem {
-  width: 56px; height: 56px;
-  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  outline-offset: 4px;
-  transform: rotate(45deg);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
-}
 /* 卡面：logo + MCard 金字 */
 .sp-front {
   transform: rotateY(180deg);
@@ -2099,7 +2091,14 @@ body.no-token .layout > main { display: none !important; }
 }
 .sp-logo { width: 52px; height: 52px; object-fit: contain; animation: spPop 0.5s cubic-bezier(0.3, 1.5, 0.4, 1) var(--t-logo-at) backwards; }
 @keyframes spPop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
-.sp-word { display: flex; gap: 2px; font-size: clamp(38px, 11vw, 56px); font-weight: 900; letter-spacing: 0.02em; line-height: 1; position: relative; }
+/* 金字容器必须裁切扫光（overflow hidden）：扫光 ::after 是 skew 白条，不裁会溢出卡片外——
+   曾表现为「卡片左侧斜白块」（padding 留出金字 drop-shadow 辉光余量，spChar 动画的 blur 也在盒内） */
+.sp-word {
+  display: flex; gap: 2px; font-size: clamp(38px, 11vw, 56px); font-weight: 900; letter-spacing: 0.02em; line-height: 1;
+  position: relative;
+  padding: 12px 16px; margin: -12px -16px;        /* 视觉零位移，仅扩裁切盒给辉光留余量 */
+  overflow: hidden;
+}
 .sp-word span {
   background: linear-gradient(160deg, #ffd98a 8%, var(--accent) 45%, var(--accent-2) 90%);
   -webkit-background-clip: text; background-clip: text;
@@ -2123,8 +2122,8 @@ body.no-token .layout > main { display: none !important; }
   pointer-events: none;
 }
 @keyframes spSweep { 0% { left: -30%; opacity: 0; } 12% { opacity: 1; } 42% { left: 108%; opacity: 0; } 100% { left: 108%; opacity: 0; } }
-/* 金色流光环（border beam）：一道连续渐变光带沿卡框环形流动——亮头白金、尾巴渐隐成橙金（conic 自带彗尾），
-   外叠同角度旋转的模糊光晕层。@property 让 conic 起始角可动画（不支持则静态光带，可接受）。 */
+/* 金色流光环（border beam）：一道连续渐变光带沿卡框环形流动——亮头白金、尾巴渐隐成橙金（conic 自带彗尾）。
+   @property 让 conic 起始角可动画（不支持则静态光带，可接受）。 */
 @property --sp-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 .sp-ring {
   position: absolute; inset: -5px;
@@ -2133,7 +2132,7 @@ body.no-token .layout > main { display: none !important; }
   animation: spRingIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) var(--t-ring-at) forwards;
 }
 @keyframes spRingIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
-.sp-ring::before, .sp-ring::after {
+.sp-ring::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
   background: conic-gradient(from var(--sp-a),
     transparent 0deg, transparent 285deg,
@@ -2142,13 +2141,13 @@ body.no-token .layout > main { display: none !important; }
     #ffe9b8 351deg,
     #fff8e8 358deg, transparent 360deg);          /* 头部白亮（358°），向尾部渐橙渐隐 */
   animation: spBeamSpin 0.5s linear infinite;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 75%, transparent));  /* 辉光跟随光带流动 */
+  padding: 3px;                                   /* 环宽 */
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);   /* 挖空中心成环形 */
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
 }
-.sp-ring::before { padding: 3px; }                /* 锐利主环（3px 流光） */
-.sp-ring::after { padding: 7px; filter: blur(8px); opacity: 0.75; }  /* 光晕层：更宽更糊，跟随时像光的呼吸 */
 @keyframes spBeamSpin { to { --sp-a: 360deg; } }
 /* 翻面白闪（SSR 时刻）：全屏低透明白光脉冲 */
 .sp-flash {
