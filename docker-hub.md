@@ -12,6 +12,7 @@ Node.js + Express + SQLite 后端，原生 JavaScript 前端（无框架）。�
 ## ✨ 功能 / Features
 
 - 💳 **持有卡片** —— 可手动锁定（锁定后不参与交易）
+- 📚 **我的卡册** —— 按影片聚合稀有度/称号（持有+挂单双格矩阵，一键定向搜索）
 - 📊 **市场行情** —— 手动采集挂牌 / 价格 / 稀有度分布
 - 🛒 **交易** —— 买入 / 卖出 / 撤单（内置安全门 + 预算池控制）
 - 📈 **市场数据** —— 量价叠加 / 价格分布 / 小时分布走势，支持时间窗切换 + 一键生成分析报告
@@ -32,7 +33,7 @@ docker run -d \
   -v mcard-data:/app/data \
   -e AUTH_PASSWORD=changeme \
   --restart unless-stopped \
-  doc2page/mcard:1.0.2
+  doc2page/mcard:1.1.0
 ```
 
 **或 `docker-compose.yml`：**
@@ -40,7 +41,7 @@ docker run -d \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.0.2
+    image: doc2page/mcard:1.1.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -86,4 +87,4 @@ docker compose up -d --build
 
 - 源码与完整文档：https://github.com/doc2page/mcard
 - 问题反馈：https://github.com/doc2page/mcard/issues
-- 镜像标签：`1.0.2` · `latest`（仅 amd64）
+- 镜像标签：`1.1.0` · `latest`（仅 amd64）

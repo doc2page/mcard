@@ -15,6 +15,7 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 ## Features
 
 - 💳 **Inventory** — browse owned cards; manually lock cards (locked cards are excluded from trading)
+- 📚 **My binder** — rarities & titles aggregated by film (held/listed matrix, one-click add to directed search)
 - 📊 **Market** — manually fetch listings, prices, and rarity distribution
 - 🛒 **Trading** — buy / sell / cancel orders (with safety gate and budget pool)
 - 📈 **Market data** — volume×price / price distribution / hourly trend charts with time-window switch + one-click analysis report
@@ -60,7 +61,7 @@ The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) 
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.2
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.1.0
 ```
 
 Or `docker-compose.yml`:
@@ -68,7 +69,7 @@ Or `docker-compose.yml`:
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.0.2
+    image: doc2page/mcard:1.1.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]

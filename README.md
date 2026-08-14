@@ -15,6 +15,7 @@
 ## 功能
 
 - 💳 **持有卡片** —— 查看持有的卡牌，可手动锁定（锁定后不会被交易处理）
+- 📚 **我的卡册** —— 按影片聚合稀有度/称号的收藏册（持有+挂单双格矩阵，一键加入定向搜索）
 - 📊 **市场行情** —— 手动采集市场挂牌、价格、稀有度分布
 - 🛒 **交易** —— 买入 / 卖出 / 撤单（内置安全门与预算池控制）
 - 📈 **市场数据** —— 量价叠加 / 价格分布 / 小时分布走势图，支持时间窗切换 + 一键生成分析报告
@@ -60,7 +61,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.0.2
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.1.0
 ```
 
 或 `docker-compose.yml`：
@@ -68,7 +69,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.0.2
+    image: doc2page/mcard:1.1.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
