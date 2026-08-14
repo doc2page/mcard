@@ -2030,3 +2030,142 @@ body.no-token .layout > main { display: none !important; }
   /* 市场数据/市场筛选条：移动端每行一类（对齐 .trades-search 做法：label 占整行，chips 跟随）*/
   .market-filter .mf-row .chip-group-label { flex: 1 0 100%; margin-left: 0; }
 }
+
+/* ============ 启动揭幕：开箱抽卡（#splash） ============
+   时间轴以 CSS 变量驱动（平时压缩版；#splash.full = 登录成功后的完整仪式，login.html 种 sessionStorage 标记）：
+   卡背入场 → 翻面(--t-flip-at) → 白闪(--t-flash-at) → 金光跑圈(--t-ring-at) → 金字逐字(--t-char-at)
+   → 扫光呼吸(--t-sweep-at) → 数据就绪(≥最短展示)/5s/点击 → .leave 冲屏揭幕。全部 transform/opacity 合成友好。 */
+#splash {
+  --t-in: 0.35s; --t-flip-at: 0.3s; --t-flip-dur: 0.55s; --t-flash-at: 0.62s; --t-ring-at: 0.85s;
+  --t-logo-at: 0.9s; --t-char-at: 0.95s; --t-char-gap: 0.04s; --t-sweep-at: 1.35s;
+  position: fixed; inset: 0; z-index: 999;
+  display: grid; place-items: center;
+  background: var(--bg);
+  cursor: pointer;                    /* 点击跳过 */
+  transition: opacity 0.6s ease 0.15s;
+}
+/* 完整仪式（登录成功跳转）：放慢铺陈 */
+#splash.full {
+  --t-in: 0.55s; --t-flip-at: 0.7s; --t-flip-dur: 0.9s; --t-flash-at: 1.35s; --t-ring-at: 1.5s;
+  --t-logo-at: 1.6s; --t-char-at: 1.65s; --t-char-gap: 0.06s; --t-sweep-at: 2.3s;
+}
+#splash.leave { opacity: 0; pointer-events: none; }
+.sp-scene { position: relative; perspective: 1200px; display: grid; place-items: center; }
+/* 卡牌：入场 + 持续悬浮（浮动/微摆在外层，翻转在内层，互不干扰） */
+.sp-card {
+  position: relative; z-index: 1;
+  width: min(66vw, 300px); aspect-ratio: 5 / 7;
+  animation: spIn var(--t-in) cubic-bezier(0.2, 0.9, 0.3, 1) backwards, spFloat 3.4s ease-in-out var(--t-in) infinite;
+}
+@keyframes spIn { from { opacity: 0; transform: translateY(26px) scale(0.86); } to { opacity: 1; transform: none; } }
+@keyframes spFloat { 0%, 100% { transform: translateY(0) rotateX(0deg) rotateY(0deg); } 25% { transform: translateY(-7px) rotateX(2deg) rotateY(-2deg); } 75% { transform: translateY(4px) rotateX(-1.5deg) rotateY(2deg); } }
+.sp-inner {
+  position: absolute; inset: 0;
+  transform-style: preserve-3d;
+  animation: spFlip var(--t-flip-dur) cubic-bezier(0.35, 1.25, 0.4, 1) var(--t-flip-at) forwards;  /* forwards 定格 180deg（露出正面） */
+}
+@keyframes spFlip { from { transform: rotateY(0deg); } to { transform: rotateY(180deg); } }
+.sp-face {
+  position: absolute; inset: 0;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.7);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);  /* 金色双线边框（呼应卡册双框徽章） */
+  outline-offset: -7px;
+}
+/* 卡背：暗纹 + 中央菱形徽记 */
+.sp-back {
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 55%),
+    repeating-linear-gradient(45deg, transparent 0 10px, rgba(255, 255, 255, 0.025) 10px 12px),
+    var(--surface-2);
+}
+.sp-emblem {
+  width: 56px; height: 56px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: 4px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+}
+/* 卡面：logo + MCard 金字 */
+.sp-front {
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, var(--surface), var(--surface-2));
+}
+.sp-logo { width: 52px; height: 52px; object-fit: contain; animation: spPop 0.5s cubic-bezier(0.3, 1.5, 0.4, 1) var(--t-logo-at) backwards; }
+@keyframes spPop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
+.sp-word { display: flex; gap: 2px; font-size: clamp(38px, 11vw, 56px); font-weight: 900; letter-spacing: 0.02em; line-height: 1; position: relative; }
+.sp-word span {
+  background: linear-gradient(160deg, #ffd98a 8%, var(--accent) 45%, var(--accent-2) 90%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent));
+  animation: spChar 0.5s cubic-bezier(0.3, 1.6, 0.4, 1) backwards;
+}
+.sp-word span:nth-child(1) { animation-delay: calc(var(--t-char-at)); }
+.sp-word span:nth-child(2) { animation-delay: calc(var(--t-char-at) + var(--t-char-gap) * 1); }
+.sp-word span:nth-child(3) { animation-delay: calc(var(--t-char-at) + var(--t-char-gap) * 2); }
+.sp-word span:nth-child(4) { animation-delay: calc(var(--t-char-at) + var(--t-char-gap) * 3); }
+.sp-word span:nth-child(5) { animation-delay: calc(var(--t-char-at) + var(--t-char-gap) * 4); }
+@keyframes spChar { from { opacity: 0; transform: translateY(14px) scale(0.6); filter: blur(8px); } to { opacity: 1; transform: none; filter: blur(0); } }
+/* 金字周期扫光 */
+.sp-word::after {
+  content: ''; position: absolute; top: -20%; bottom: -20%; left: -30%;
+  width: 26%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-12deg);
+  animation: spSweep 2.8s ease-in-out var(--t-sweep-at) infinite;
+  pointer-events: none;
+}
+@keyframes spSweep { 0% { left: -30%; opacity: 0; } 12% { opacity: 1; } 42% { left: 108%; opacity: 0; } 100% { left: 108%; opacity: 0; } }
+/* 金色流光环（border beam）：一道连续渐变光带沿卡框环形流动——亮头白金、尾巴渐隐成橙金（conic 自带彗尾），
+   外叠同角度旋转的模糊光晕层。@property 让 conic 起始角可动画（不支持则静态光带，可接受）。 */
+@property --sp-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.sp-ring {
+  position: absolute; inset: -5px;
+  border-radius: 20px;
+  opacity: 0;
+  animation: spRingIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) var(--t-ring-at) forwards;
+}
+@keyframes spRingIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+.sp-ring::before, .sp-ring::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: conic-gradient(from var(--sp-a),
+    transparent 0deg, transparent 285deg,
+    color-mix(in srgb, var(--accent-2) 70%, transparent) 315deg,
+    var(--accent) 337deg,
+    #ffe9b8 351deg,
+    #fff8e8 358deg, transparent 360deg);          /* 头部白亮（358°），向尾部渐橙渐隐 */
+  animation: spBeamSpin 0.5s linear infinite;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);   /* 挖空中心成环形 */
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.sp-ring::before { padding: 3px; }                /* 锐利主环（3px 流光） */
+.sp-ring::after { padding: 7px; filter: blur(8px); opacity: 0.75; }  /* 光晕层：更宽更糊，跟随时像光的呼吸 */
+@keyframes spBeamSpin { to { --sp-a: 360deg; } }
+/* 翻面白闪（SSR 时刻）：全屏低透明白光脉冲 */
+.sp-flash {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.25) 45%, transparent 75%);
+  opacity: 0;
+  animation: spFlash 0.35s ease-out var(--t-flash-at);
+}
+@keyframes spFlash { 0% { opacity: 0; } 30% { opacity: 0.55; } 100% { opacity: 0; } }
+/* 冲屏揭幕：卡放大冲向用户 + 淡出（遮罩 opacity 由 #splash.leave 承担） */
+#splash.leave .sp-card { animation: spZoom 0.6s cubic-bezier(0.5, 0, 0.8, 0.4) forwards; }
+@keyframes spZoom { to { transform: scale(2.6); opacity: 0; } }
+#splash.leave .sp-ring { animation: none; opacity: 0; transition: opacity 0.25s; }
+/* 动效减弱：跳过编排，定格卡面 */
+@media (prefers-reduced-motion: reduce) {
+  #splash, #splash * { animation: none !important; transition: none !important; }
+  .sp-inner { transform: rotateY(180deg); }
+  .sp-word span { opacity: 1; }
+  .sp-ring { opacity: 0.6; }
+}

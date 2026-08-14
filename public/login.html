@@ -54,7 +54,7 @@
       btn.disabled = true; err.textContent = '';
       try {
         var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
-        if (r.ok) { location.href = '/'; }
+        if (r.ok) { try { sessionStorage.setItem('mcard.splash.full', '1'); } catch (e) {} location.href = '/'; }  // 登录成功 → index 播完整开箱仪式（平时 F5 压缩版）
         else { err.textContent = I.wrong; btn.disabled = false; document.getElementById('pw').select(); }
       } catch (ex) { err.textContent = I.net; btn.disabled = false; }
     });

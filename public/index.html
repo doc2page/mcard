@@ -16,6 +16,26 @@
 <body>
   <div class="bg-fx" aria-hidden="true"></div>
 
+  <!-- 启动揭幕：开箱抽卡（卡背悬浮→翻面→白闪→金光跑圈→金字→冲屏揭幕；数据就绪/超时/点击 触发，见 app.js dismissSplash。
+       平时压缩时间轴；登录成功跳转播完整仪式（login.html 种 sessionStorage 标记 + #splash.full 放宽时间变量） -->
+  <div id="splash" role="presentation">
+    <div class="sp-scene">
+      <div class="sp-card">
+        <div class="sp-inner">
+          <div class="sp-face sp-back" aria-hidden="true">
+            <div class="sp-emblem" aria-hidden="true"></div>
+          </div>
+          <div class="sp-face sp-front">
+            <img class="sp-logo" src="logo.png" alt="" />
+            <div class="sp-word" aria-label="MCard"><span>M</span><span>C</span><span>a</span><span>r</span><span>d</span></div>
+          </div>
+        </div>
+        <div class="sp-ring" aria-hidden="true"></div>
+        <div class="sp-flash" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+
   <header class="topbar">
     <button class="menu-toggle" id="menuToggle" type="button" aria-label="菜单">☰</button>
     <div class="brand">
