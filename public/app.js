@@ -418,6 +418,7 @@ function renderToolbar() {
 }
 // ============ 我的卡册：持有+当前挂单 按影片聚合稀有度/称号（机制卡不计） ============
 const CB_TITLE_WEIGHT = { '傳火': 1, '薪火': 2, '星火': 3, '殘焰': 4, '薪王': 5 }; // 排序加权：薪王>殘焰>星火>薪火>傳火
+const CB_RARITY_WEIGHT = { UR: 30, SSR: 10, SR: 5, R: 3, N: 1 };  // 与掉落/画像 DROP_RARITY_WEIGHT（stats.js）同值——前端未加载 stats.js，写死同源
 function computeCardBook() {
   const films = new Map();
   function add(c, listed) {
@@ -438,11 +439,12 @@ function computeCardBook() {
   });
   const arr = Array.from(films.values());
   for (const f of arr) {
-    f.rarityCount = Object.keys(f.rarities).length;
-    f.titleScore = Object.keys(f.titles).reduce((s, tk) => s + (CB_TITLE_WEIGHT[tk] || 0), 0);
+    f.rarityCount = Object.keys(f.rarities).length;                                            // 集齐稀有度种数
+    f.rarityScore = Object.keys(f.rarities).reduce((s, r) => s + (CB_RARITY_WEIGHT[r] || 0), 0);  // 档位质量：有该档则计一次权重（UR30>SSR10>SR5>R3>N1）
+    f.titleScore = Object.keys(f.titles).reduce((s, tk) => s + (CB_TITLE_WEIGHT[tk] || 0), 0);  // 称号含金量：每称号计一次
   }
-  // 排序：稀有度种数降序 → 称号加权分降序（每称号计一次）→ 片名
-  arr.sort((a, b) => b.rarityCount - a.rarityCount || b.titleScore - a.titleScore || String(a.filmName).localeCompare(String(b.filmName)));
+  // 排序：稀有度种数 ↓ → 稀有度加权和 ↓（种数同档时高档位优先）→ 称号加权分 ↓ → 片名
+  arr.sort((a, b) => b.rarityCount - a.rarityCount || b.rarityScore - a.rarityScore || b.titleScore - a.titleScore || String(a.filmName).localeCompare(String(b.filmName)));
   return arr;
 }
 
