@@ -334,6 +334,12 @@ function renderConfig() {
   if (psBtn) psBtn.onclick = () => { toggleView('portrait'); };
   const backBtn = $('backToMarketBtn');
   if (backBtn) backBtn.onclick = () => toggleView('market');
+  // 市场工具行手动刷新：统一入口 triggerMarketRefresh（节流 + spin 同步）；无 key 时 toast 提示
+  const rbtn = $('refreshBtn');
+  if (rbtn) rbtn.onclick = () => {
+    if (!state || !hasApiKey(state)) { showToast(t('token.unset'), 'info'); return; }
+    triggerMarketRefresh();
+  };
 }
 
 // ---------- live 部分：间隔标签 + 卡片 ----------
@@ -578,6 +584,23 @@ function renderCardBook() {
   })();
 }
 
+// 市场刷新统一入口：所有触发路径（按钮/切回市场/初始加载/保存 token/改 pageSize/批量买入后）都走这里。
+// 8s 节流（连点只刷一次防滥用，与后端 market 冷却对齐）+ 刷新按钮 spin 同步（API 返回即停）——任何路径在刷，按钮都转，一目了然。
+var _lastMarketRefreshAt = 0;
+function triggerMarketRefresh(force) {
+  if (!state || !hasApiKey(state)) return;
+  var now = Date.now();
+  if (!force && now - _lastMarketRefreshAt < 8000) return;   // 节流：冷却内静默忽略
+  _lastMarketRefreshAt = now;
+  var p = hasSearchTags() ? runSearch() : send({ type: 'REFRESH_NOW' });
+  var rbtn = $('refreshBtn');
+  if (rbtn) {
+    rbtn.classList.add('refreshing');
+    var stop = () => rbtn.classList.remove('refreshing');
+    Promise.resolve(p).then(stop, stop);
+  }
+}
+
 function toggleView(v) {
   view = v;
   document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）
@@ -587,8 +610,8 @@ function toggleView(v) {
   const grid = $('grid');
   if (grid) grid._sig = null;
   renderLive();
-  // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound
-  if (v === 'market' && state && hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
+  // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound（统一入口：节流+按钮 spin 同步）
+  if (v === 'market') triggerMarketRefresh();
   // 移动端抽屉：切 view 后自动关闭
   var _sb = document.querySelector('.sidebar'); if (_sb) _sb.classList.remove('open');
   var _mk = $('drawerMask'); if (_mk) _mk.classList.remove('open');
@@ -4014,7 +4037,7 @@ async function runBatchOp() {
   toggleBatchInputs(false);
   renderBatchFooter();
   if (batchState.op === 'buy') {  // buy 影响交易记录 + 预算(storage.onChanged 自动) + 市场网格；不刷挂单/持有
-    send({ type: 'REFRESH_NOW' });
+    triggerMarketRefresh(true);
     send({ type: 'LOAD_TRADES' });
   } else {
     send({ type: 'LOAD_ORDERS' });
@@ -4027,7 +4050,7 @@ async function retryOne(item) {
   batchState.running = true; toggleBatchInputs(true);
   await runBatch([item], paintBatchRowStatus, function () { return batchState.aborted; });
   batchState.running = false; toggleBatchInputs(false); renderBatchFooter();
-  if (batchState.op === 'buy') { send({ type: 'REFRESH_NOW' }); send({ type: 'LOAD_TRADES' }); }
+  if (batchState.op === 'buy') { triggerMarketRefresh(true); send({ type: 'LOAD_TRADES' }); }
   else { send({ type: 'LOAD_ORDERS' }); if (batchState.op !== 'cancel') send({ type: 'LOAD_INVENTORY' }); }
 }
 async function retryAllFailed() {
@@ -4036,7 +4059,7 @@ async function retryAllFailed() {
   batchState.running = true; toggleBatchInputs(true);
   await runBatch(failed, paintBatchRowStatus, function () { return batchState.aborted; });
   batchState.running = false; toggleBatchInputs(false); renderBatchFooter();
-  if (batchState.op === 'buy') { send({ type: 'REFRESH_NOW' }); send({ type: 'LOAD_TRADES' }); }
+  if (batchState.op === 'buy') { triggerMarketRefresh(true); send({ type: 'LOAD_TRADES' }); }
   else { send({ type: 'LOAD_ORDERS' }); if (batchState.op !== 'cancel') send({ type: 'LOAD_INVENTORY' }); }
 }
 function toggleBatchInputs(disabled) {
@@ -4476,6 +4499,9 @@ async function removeSearchTag(tag) {
 async function runSearch() {
   const tags = ((state.config && state.config.searchTags) || []);
   if (!tags.length) { searchResults = null; searching = false; renderCards(); return; }
+  var _now = Date.now();                                   // 2s 节流：seq 只丢弃旧结果不挡连发——连点/回车连击每次都打 M-TEAM search（反风控）
+  if (runSearch._lastAt && _now - runSearch._lastAt < 2000) return;
+  runSearch._lastAt = _now;
   if (!hasApiKey(state)) return;
   const seq = ++_searchSeq;
   searching = true;
@@ -4705,6 +4731,9 @@ function choiceDialog(opts) {
 
 // 挂单修改：弹选择窗（取消挂单 / 修改挂单价）。改价 = cancel + 新价重新 sell
 async function onOrderModify(it) {
+  if (onOrderModify._busy) return;   // 单飞锁：撤单/改价（cancel+sell 两步）全程只允许一个流程，连点防重复撤挂
+  onOrderModify._busy = true;
+  try {
   const body = el('div');
   // 当前挂单价（改价参考）—— it.price 与挂单卡片同源（挂单价 = 净收入 × 1.05）
   const cur = (it.price != null && it.price !== '') ? Number(it.price) : NaN;
@@ -4735,10 +4764,14 @@ async function onOrderModify(it) {
     if (sr && sr.ok) { await send({ type: 'LOAD_ORDERS' }); showToast(t('order.modifySuccess'), 'success'); }
     else showToast(t('order.modifyFailed'), 'error');
   }
+  } finally { onOrderModify._busy = false; }
 }
 
 // 一键购买：二次确认 → 后台开详情页核对价格并成交
 async function onBuy(it) {
+  if (onBuy._busy) return;   // 单飞锁：确认弹窗+购买全程只允许一个流程（连点/多卡并发 = 双买风险）
+  onBuy._busy = true;
+  try {
   const price = it.lowestAsk;
   // 无卖单防御（lowestAsk=null 或负值）；0 放行（可能有 0 价挂单）
   if (price == null || Number(price) < 0) { showToast(t('err.noAsk'), 'error'); return; }
@@ -4793,6 +4826,7 @@ async function onBuy(it) {
       ? t('err.cancelFailedExtra', { url: resp.url }) : '';
     showToast(t('trade.buyFailedToast', { text: text + extra }), 'error');
   }
+  } finally { onBuy._busy = false; }
 }
 
 // ---------- 事件 ----------
@@ -4857,7 +4891,7 @@ async function onPageSizePick(value) {
   await send({ type: 'SET_CONFIG', config: cfg });
   state = await send({ type: 'GET_STATE' });
   renderLive();
-  if (hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }   // 改 pageSize 后立即刷新市场（有 tag → 重 search）
+  triggerMarketRefresh();   // 改 pageSize 后立即刷新市场（有 tag → 重 search；统一入口：节流+按钮 spin 同步）
 }
 
 async function onModePick(value) {
@@ -5419,7 +5453,7 @@ function initTokenModal() {
       apiKeyInvalidShown = false;  // 新 key 已保存，重置失效弹窗 guard，下次失效可再弹
       state = await send({ type: 'GET_STATE' });
       renderAll();
-      send({ type: 'REFRESH_NOW' });   // 验证后立即触发市场采集（refreshAll 的 ensure 前置慢、市场 startRound 排最后；先采一轮让市场尽快出卡）
+      triggerMarketRefresh(true);   // 验证后立即触发市场采集（refreshAll 的 ensure 前置慢、市场 startRound 排最后；先采一轮让市场尽快出卡；force 绕节流）
     } else {
       var msgEl = $('tokenModalMsg');
       if (msgEl) { msgEl.textContent = (r && r.reason === 'invalid') ? t('token.errInvalid') : t('token.errVerify'); msgEl.className = 'token-msg err'; }
@@ -5478,8 +5512,8 @@ function applyLabUrl() {
   initTokenPanel();
   if (!hasApiKey(state)) document.body.classList.add('no-token');
   initTokenModal();
-  // 加载时刷新市场：有定向 tag → runSearch；否则 → triggerRefreshRound（用 cfg.listPageSize）
-  if (hasApiKey(state)) { if (hasSearchTags()) runSearch(); else send({ type: 'REFRESH_NOW' }); }
+  // 加载时刷新市场：有定向 tag → runSearch；否则 → triggerRefreshRound（统一入口：节流+按钮 spin 同步）
+  triggerMarketRefresh();
 })();
 
 // 交易记录搜索框事件绑定（仅初始化一次）

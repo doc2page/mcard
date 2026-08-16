@@ -42,6 +42,7 @@ registerMessages('en', {
   'token.unset': 'Not set',
   'token.edit': 'Edit token',
   'token.placeholderEmpty': 'No token set',
+  'market.refresh': 'Refresh market',
   'token.placeholderNew': 'Paste a new x-api-key token',
   'token.save': 'Save & verify',
   'token.verifying': 'Verifying…',

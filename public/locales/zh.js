@@ -47,6 +47,7 @@ registerMessages('zh', {
   'token.unset': '未设置',
   'token.edit': '修改令牌',
   'token.placeholderEmpty': '未设置令牌',
+  'market.refresh': '刷新市场',
   'token.placeholderNew': '粘贴新的 x-api-key 令牌',
   'token.save': '保存并验证',
   'token.verifying': '验证中…',

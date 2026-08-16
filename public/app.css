@@ -915,7 +915,11 @@ button.stat.active .stat-val { color: var(--accent); }
 .th-modal .preset-card .th-group-title { font-size: 13px; font-weight: 800; }  /* 「预设」标题单独调大加粗，不影响通用 .th-group-title */
 .th-modal .preset-card { margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
 /* 卡片区上方工具条（按价格/按分类），右对齐 */
-.grid-toolbar { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.grid-toolbar { display: flex; align-items: center; justify-content: flex-end; margin: 0 0 10px; }
+/* 市场工具行手动刷新（最左；refreshing/spin 复用下方遗留 #refreshBtn 规则） */
+.grid-toolbar #refreshBtn { margin-right: auto; padding: 0; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-dim); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.grid-toolbar #refreshBtn:hover { color: var(--text); border-color: var(--border-strong); }
+.grid-toolbar #refreshBtn.refreshing { pointer-events: auto; opacity: 1; }  /* 覆盖遗留禁点：按钮永远可点（节流在 JS 层），spin 仅表示请求中 */
 .th-modal .modal-actions { justify-content: flex-end; }
 .th-modal .modal-actions .btn { flex: none; min-width: 96px; }
 
