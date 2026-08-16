@@ -33,7 +33,7 @@ docker run -d \
   -v mcard-data:/app/data \
   -e AUTH_PASSWORD=changeme \
   --restart unless-stopped \
-  doc2page/mcard:1.1.0
+  doc2page/mcard:1.2.0
 ```
 
 **或 `docker-compose.yml`：**
@@ -41,7 +41,7 @@ docker run -d \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.1.0
+    image: doc2page/mcard:1.2.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -87,4 +87,4 @@ docker compose up -d --build
 
 - 源码与完整文档：https://github.com/doc2page/mcard
 - 问题反馈：https://github.com/doc2page/mcard/issues
-- 镜像标签：`1.1.0` · `latest`（仅 amd64）
+- 镜像标签：`1.2.0` · `latest`（仅 amd64）
