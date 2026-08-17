@@ -61,7 +61,7 @@ The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) 
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.1
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.2
 ```
 
 Or `docker-compose.yml`:
@@ -69,7 +69,7 @@ Or `docker-compose.yml`:
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.2.1
+    image: doc2page/mcard:1.2.2
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -104,7 +104,7 @@ Everything lives in `docker-compose.yml`:
 
 Data persists in `./data/mcard.db` — removing the container or rebuilding the image won't lose your API key or cached data.
 
-> **Directory permission**: since v1.2.1 the container runs as non-root (`node`, uid 1000). If the host `./data` directory is not owned by uid 1000 (common on NAS devices like Synology), run once before first start: `sudo chown -R 1000:1000 ./data`
+> **Directory permission**: since v1.2.2 the container runs as non-root (`node`, uid 1000). If the host `./data` directory is not owned by uid 1000 (common on NAS devices like Synology), run once before first start: `sudo chown -R 1000:1000 ./data`
 
 ## Common commands
 
@@ -142,7 +142,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # Upgrade (back up first! see above)
 docker compose down
-docker pull doc2page/mcard:latest        # or a pinned version like :1.2.1
+docker pull doc2page/mcard:latest        # or a pinned version like :1.2.2
 docker compose up -d
 
 # Rollback: change the image tag in docker-compose.yml back to the previous version, then up -d

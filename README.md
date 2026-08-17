@@ -61,7 +61,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.1
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.2
 ```
 
 或 `docker-compose.yml`：
@@ -69,7 +69,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.2.1
+    image: doc2page/mcard:1.2.2
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -104,7 +104,7 @@ docker compose up -d --build
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 
-> **目录权限**：v1.2.1 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
+> **目录权限**：v1.2.2 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
 
 ## 常用命令
 
@@ -142,7 +142,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # 升级（先备份！见上节）
 docker compose down
-docker pull doc2page/mcard:latest        # 或指定版本如 :1.2.1
+docker pull doc2page/mcard:latest        # 或指定版本如 :1.2.2
 docker compose up -d
 
 # 回滚：把 docker-compose.yml 里 image 改回旧版本 tag，再 up -d
