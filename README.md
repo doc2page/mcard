@@ -61,7 +61,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.0
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.1
 ```
 
 或 `docker-compose.yml`：
@@ -69,7 +69,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.2.0
+    image: doc2page/mcard:1.2.1
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
