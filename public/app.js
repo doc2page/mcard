@@ -3911,10 +3911,12 @@ function openBatchModal(op, items) {
   renderBatchBody();
   renderBatchFooter();
   var m = $('batchModal');
+  _batchFocusRestore = modalFocusRestore();
   m.hidden = false;
   var main = $('mainArea'); if (main) main.style.overflow = 'hidden';  // 锁背景滚动
   requestAnimationFrame(function () { m.classList.add('show'); });
 }
+var _batchFocusRestore = null;
 function closeBatchModal() {
   if (!batchState) return;
   if (batchState.running) { batchState.aborted = true; return; }  // 执行中：标记中断，当前项完成后停
@@ -3924,6 +3926,7 @@ function hideBatchModal() {
   var m = $('batchModal');
   m.classList.remove('show');
   setTimeout(function () { m.hidden = true; var main = $('mainArea'); if (main) main.style.overflow = ''; }, 180);
+  if (_batchFocusRestore) { _batchFocusRestore(); _batchFocusRestore = null; }
   batchState = null;
   clearBatchSelection(true);
 }
@@ -5150,16 +5153,25 @@ async function onPresetDelete(name) {
 function openThresholdModal() {
   const m = $('thresholdModal');
   if (!m) return;
+  _thFocusRestore = modalFocusRestore();
   m.hidden = false;
   const main = $('mainArea');
   if (main) main.style.overflow = 'hidden';  // 锁背景滚动（main 是滚动容器）
-  requestAnimationFrame(() => m.classList.add('show'));
+  requestAnimationFrame(() => {
+    m.classList.add('show');
+    const first = m.querySelector('input'); if (first) first.focus();  // a11y：打开即聚焦首输入
+  });
 }
+let _thFocusRestore = null;
 function closeThresholdModal() {
   const m = $('thresholdModal');
   if (!m) return;
   m.classList.remove('show');
-  setTimeout(() => { m.hidden = true; const main = $('mainArea'); if (main) main.style.overflow = ''; }, 180);  // 模态消失后再解锁
+  setTimeout(() => {
+    m.hidden = true;
+    const main = $('mainArea'); if (main) main.style.overflow = '';  // 模态消失后再解锁
+    if (_thFocusRestore) { _thFocusRestore(); _thFocusRestore = null; }
+  }, 180);
 }
 
 // 右下角状态 Toast：type='success'(绿,默认) | 'error'(红) | 'info'(蓝,进行中/提示)。
@@ -5426,12 +5438,14 @@ function initTokenPanel() {
 
 // ---------- 首次令牌引导模态窗（无 mtApiKey 时弹出，保存后触发首次全量刷新建库）----------
 // 打开令牌模态窗（首次引导 + 令牌失效重新输入复用同一入口）
+var _tokenFocusRestore = null;
 function openTokenModal() {
   var modal = $('tokenModal');
   var input = $('tokenModalInput');
   var save = $('tokenModalSave');
   var consent = $('tokenModalConsent');
   if (!modal || !input || !save) return;
+  _tokenFocusRestore = modalFocusRestore();
   modal.hidden = false;
   input.value = '';
   var siteSel = $('tokenModalSite');
@@ -5472,6 +5486,7 @@ function initTokenModal() {
     syncSaveDisabled();
     if (r && r.ok) {
       modal.hidden = true;
+      if (_tokenFocusRestore) { _tokenFocusRestore(); _tokenFocusRestore = null; }
       document.body.classList.remove('no-token');
       apiKeyInvalidShown = false;  // 新 key 已保存，重置失效弹窗 guard，下次失效可再弹
       state = await send({ type: 'GET_STATE' });

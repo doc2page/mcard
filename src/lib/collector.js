@@ -469,35 +469,34 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   // feed 增量：/pt-card/feed 结构化卡片 → feedCards（cardId 去重，游标 createdDate > lastMsgDate 只补 msg 之后）
   async function mergeDropFeed(items) {
     if (!Array.isArray(items) || !items.length) return 0;
-    const st = await state.getState();
-    const ds = Object.assign({}, st.dropStats || {});
-    ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards.slice() : [];
-    if (ds.lastMsgDate) ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // 只留 messages 未覆盖的（> lastMsgDate），避免与导入的全量 messages 双源重叠
-    ds.since = ds.since || '';
-    const existIds = new Set(ds.feedCards.map((c) => String(c.cardId)));
-    const cursor = ds.lastMsgDate || '';   // feed 只补 msg 最新之后，不重叠
-    let added = 0;
-    for (const it of items) {
-      if (!it || it.id == null) continue;
-      const id = String(it.id);
-      if (existIds.has(id)) continue;
-      const created = it.createdDate || '';
-      if (cursor && created && created <= cursor) continue;     // 只补 msg 之后
-      ds.feedCards.push({ cardId: id, createdDate: created, rarity: it.rarity || '', title: it.title || '' });
-      existIds.add(id);
-      added++;
-    }
-    if (added) ds.feedCards.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
-    // since 取 messages+feedCards 最早一条（导入的历史 messages 可能早于 feed，不能只看 feed 丢起点）
-    let earliest = '';
-    for (const arr of [ds.messages, ds.feedCards]) {
-      if (!Array.isArray(arr)) continue;
-      for (const it of arr) { const d = it.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
-    }
-    if (earliest) ds.since = earliest;
-    ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
-    await state.update({ dropStats: ds });
-    console.log('[mcard] drop merged (feed), +' + added + ', total feedCards', ds.feedCards.length);
+    let added = 0, total = 0;
+    state.mutate('dropStats', (ds) => {   // 原子读改写：dropStats 是双写源（feed 增量 + 手动导入），getState 副本写回会丢并发更新
+      ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards : [];
+      if (ds.lastMsgDate) ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // 只留 messages 未覆盖的（> lastMsgDate），避免与导入的全量 messages 双源重叠
+      const existIds = new Set(ds.feedCards.map((c) => String(c.cardId)));
+      const cursor = ds.lastMsgDate || '';   // feed 只补 msg 最新之后，不重叠
+      for (const it of items) {
+        if (!it || it.id == null) continue;
+        const id = String(it.id);
+        if (existIds.has(id)) continue;
+        const created = it.createdDate || '';
+        if (cursor && created && created <= cursor) continue;     // 只补 msg 之后
+        ds.feedCards.push({ cardId: id, createdDate: created, rarity: it.rarity || '', title: it.title || '' });
+        existIds.add(id);
+        added++;
+      }
+      if (added) ds.feedCards.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
+      // since 取 messages+feedCards 最早一条（导入的历史 messages 可能早于 feed，不能只看 feed 丢起点）
+      let earliest = '';
+      for (const arr of [ds.messages, ds.feedCards]) {
+        if (!Array.isArray(arr)) continue;
+        for (const it of arr) { const d = it.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+      }
+      if (earliest) ds.since = earliest;
+      ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
+      total = ds.feedCards.length;
+    });
+    console.log('[mcard] drop merged (feed), +' + added + ', total feedCards', total);
     return added;
   }
 
@@ -526,39 +525,38 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   async function importDropMessages(raw) {
     const parsed = _parseDropJson(raw);
     if (!parsed.ok) return parsed;
-    const st = await state.getState();
-    const ds = Object.assign({}, st.dropStats || {});
-    ds.messages = Array.isArray(ds.messages) ? ds.messages.slice() : [];
-    ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards.slice() : [];
-    const existIds = new Set(ds.messages.map((m) => String(m.id)));
-    let imported = 0, skipped = 0;
-    for (const it of parsed.items) {
-      if (!it || it.id == null) { skipped++; continue; }
-      const id = String(it.id);
-      if (existIds.has(id)) { skipped++; continue; }
-      const ctx = it.context || '';
-      if (!stats.parseDropContext(ctx).length) { skipped++; continue; }  // 只留能解析出卡片的掉卡 message
-      ds.messages.push({ id: id, createdDate: it.createdDate || '', context: ctx });
-      existIds.add(id);
-      imported++;
-    }
-    // msgTotal = message 接口总条数（响应头部每次都带，无论本次是否新增）——即使全重复也记录，供前端判断补全（老用户首导或重导同样数据都能补上 msgTotal）
-    const newMsgTotal = (parsed.page && parsed.page.total) || 0;
-    const msgTotalChanged = newMsgTotal && newMsgTotal !== (ds.msgTotal || 0);
-    if (newMsgTotal) ds.msgTotal = newMsgTotal;
-    if (imported) {
-      ds.messages.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
-      ds.lastMsgDate = ds.messages[0].createdDate;  // feed 游标 = messages 最新，只补其后，不与导入历史重叠
-      ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // messages 是全量（含近期），剔除 feedCards 中已被覆盖的重叠部分，避免双源重复计算
-      let earliest = '';
-      for (const m of ds.messages) { const d = m.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
-      for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
-      if (earliest) ds.since = earliest;
-      ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
-      console.log('[mcard] drop imported (messages), +' + imported + ', total messages', ds.messages.length);
-    }
-    if (imported || msgTotalChanged) await state.update({ dropStats: ds });
-    return { ok: true, imported: imported, skipped: skipped, total: ds.messages.length, page: parsed.page || null };
+    let imported = 0, skipped = 0, total = 0;
+    state.mutate('dropStats', (ds) => {   // 原子读改写：与 mergeDropFeed 并发时防丢更新
+      ds.messages = Array.isArray(ds.messages) ? ds.messages : [];
+      ds.feedCards = Array.isArray(ds.feedCards) ? ds.feedCards : [];
+      const existIds = new Set(ds.messages.map((m) => String(m.id)));
+      for (const it of parsed.items) {
+        if (!it || it.id == null) { skipped++; continue; }
+        const id = String(it.id);
+        if (existIds.has(id)) { skipped++; continue; }
+        const ctx = it.context || '';
+        if (!stats.parseDropContext(ctx).length) { skipped++; continue; }  // 只留能解析出卡片的掉卡 message
+        ds.messages.push({ id: id, createdDate: it.createdDate || '', context: ctx });
+        existIds.add(id);
+        imported++;
+      }
+      // msgTotal = message 接口总条数（响应头部每次都带，无论本次是否新增）——即使全重复也记录，供前端判断补全（老用户首导或重导同样数据都能补上 msgTotal）
+      const newMsgTotal = (parsed.page && parsed.page.total) || 0;
+      if (newMsgTotal) ds.msgTotal = newMsgTotal;
+      if (imported) {
+        ds.messages.sort((a, b) => (b.createdDate || '').localeCompare((a.createdDate || '')));
+        ds.lastMsgDate = ds.messages[0].createdDate;  // feed 游标 = messages 最新，只补其后，不与导入历史重叠
+        ds.feedCards = ds.feedCards.filter((c) => (c.createdDate || '') > ds.lastMsgDate);  // messages 是全量（含近期），剔除 feedCards 中已被覆盖的重叠部分，避免双源重复计算
+        let earliest = '';
+        for (const m of ds.messages) { const d = m.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+        for (const c of ds.feedCards) { const d = c.createdDate || ''; if (d && (!earliest || d < earliest)) earliest = d; }
+        if (earliest) ds.since = earliest;
+        ds.summary = stats.computeDropSummary(ds.messages, ds.feedCards, ds.since, _todayStr());
+        console.log('[mcard] drop imported (messages), +' + imported + ', total messages', ds.messages.length);
+      }
+      total = ds.messages.length;
+    });
+    return { ok: true, imported: imported, skipped: skipped, total: total, page: parsed.page || null };
   }
 
   // 解析粘贴 JSON → message 数组。容忍完整响应 {code,data:{data:[...]}} / {data:[...]} / 裸数组 / 单条。

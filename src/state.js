@@ -55,6 +55,15 @@ export function createState({ store }) {
 
   return {
     getState() { return structuredClone(state); },
+    // 原子读改写：fn 直接在活 state[key] 上修改（不经 getState 副本），同步执行无并发窗口。
+    // 「getState 副本 → 改 → update 写回」模式在多写源并发时会互相覆盖丢更新
+    // （如 dropStats：采集 feed 增量与手动导入同时进行，后写覆盖先写）。双写源的 key 一律用 mutate。
+    mutate(key, fn) {
+      fn(state[key]);
+      store.saveState(state);
+      const evt = { type: 'state', patch: { [key]: state[key] } };
+      for (const cb of subscribers) cb(evt);
+    },
     async update(patch) {
       for (const k of Object.keys(patch)) {
         if (k === 'config' && isPlainObj(state.config) && isPlainObj(patch.config)) {
