@@ -11,8 +11,8 @@
 
   --text: #eef0f5;
   --text-dim: #b8bdc9;
-  --muted: #6f7689;
-  --faint: #4a5163;
+  --muted: #7b8296;   /* 5.2:1 on --bg（WCAG AA）；原 #6f7689 为 4.4:1 微差 */
+  --faint: #6e7689;   /* 4.4:1（辅助单位/标签，装饰级） */
 
   /* 强调：琥珀金（品牌） */
   --accent: #f5a623;
@@ -67,8 +67,8 @@
 
   --text: #1a1f2b;
   --text-dim: #4a5163;
-  --muted: #6f7689;
-  --faint: #9aa1b1;
+  --muted: #5f6675;   /* 5.1:1 on --bg（WCAG AA）；原 #6f7689 为 4.0:1 不足 */
+  --faint: #6b7383;   /* 4.2:1（辅助单位/标签，装饰级） */
 
   --accent: #b06a00;
   --accent-2: #d65a1f;
