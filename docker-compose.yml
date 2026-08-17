@@ -24,3 +24,14 @@ services:
       TZ: ${TZ:-Asia/Shanghai}   # 时区：掉落日界按此时区（M-TEAM 数据为北京时间，默认 Asia/Shanghai）。可在 .env 设 TZ 覆盖
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}  # 访问密码：留空=不启用；设了则需登录。建议在 .env 文件设（不入库）
     restart: unless-stopped
+    # 资源限制 + 日志上限（长期运行防日志吃满磁盘；按机器情况调整）
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -104,6 +104,8 @@ docker compose up -d --build
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 
+> **目录权限**：v1.2.1 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
+
 ## 常用命令
 
 ```bash
@@ -112,6 +114,64 @@ docker compose logs -f          # 查看日志
 docker compose restart          # 重启
 docker compose down             # 停止并删除容器（数据保留）
 ```
+
+## 数据备份与恢复
+
+所有数据（API Key、配置、采集缓存）都在 `data/mcard.db` 一个文件里。
+
+**日常备份**（运行中，安全快照需同时拷贝 WAL 三件套）：
+
+```bash
+docker cp mcard:/app/data/mcard.db ./mcard.db.bak
+docker cp mcard:/app/data/mcard.db-wal ./mcard.db-wal.bak 2>/dev/null || true
+docker cp mcard:/app/data/mcard.db-shm ./mcard.db-shm.bak 2>/dev/null || true
+```
+
+**严谨备份**（停机几秒，最稳）：
+
+```bash
+docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
+```
+
+**恢复**：`docker compose down` → 把备份的 db（及 -wal/-shm）放回 `data/` → `docker compose up -d`。
+
+**db 损坏重建**（症状：启动报 `SQLITE_CORRUPT` / `file is not a database`）：有备份先恢复备份；没有则删除 `data/mcard.db*` 重启——需重新填 API Key 并重新采集，历史数据不可恢复，请养成备份习惯。
+
+## 升级与回滚
+
+```bash
+# 升级（先备份！见上节）
+docker compose down
+docker pull doc2page/mcard:latest        # 或指定版本如 :1.2.1
+docker compose up -d
+
+# 回滚：把 docker-compose.yml 里 image 改回旧版本 tag，再 up -d
+```
+
+版本间数据向后兼容（patch/minor 不改存储结构）。版本历史见 [Releases](https://github.com/doc2page/mcard/releases)。
+
+## 安全注意事项
+
+- **API Key 与访问密码在 HTTP 下均为明文传输**。局域网/Tailscale 内使用可接受；**公网部署必须前置 HTTPS 反代**。Caddy 最小配置：
+
+  ```
+  mcard.example.com {
+      reverse_proxy 127.0.0.1:31414
+  }
+  ```
+
+- 容器以非 root（`node`, uid 1000）运行；`HOST=0.0.0.0` 监听所有网卡——请勿裸露到不可信网络
+- API Key（管 M-TEAM 访问）与 `AUTH_PASSWORD`（管页面访问）相互独立，都建议设置
+
+## 常见问题（FAQ）
+
+| 症状 | 排查 |
+| --- | --- |
+| 容器启动失败 / 数据写不进 | `./data` 目录属主非 uid 1000（NAS 常见）：`sudo chown -R 1000:1000 ./data` 后重启 |
+| 页面能开但采集报错 | API Key 失效——页面右上重新填写令牌（M-TEAM 用户实验室重新生成）；或查看 `docker compose logs -f` |
+| 数据不刷新 | 各采集有冷却（市场 8s / 持有·掉落 30s），稍后再点；确认手动刷新按钮状态 |
+| 忘记访问密码 | 修改 `.env` 的 `AUTH_PASSWORD` 后 `docker compose up -d`，数据不受影响 |
+| 升级后起不来 | 回滚到上一版本镜像（见「升级与回滚」），然后 [提 issue](https://github.com/doc2page/mcard/issues) |
 
 ## 本地开发（不用 Docker）
 

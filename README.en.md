@@ -104,6 +104,8 @@ Everything lives in `docker-compose.yml`:
 
 Data persists in `./data/mcard.db` — removing the container or rebuilding the image won't lose your API key or cached data.
 
+> **Directory permission**: since v1.2.1 the container runs as non-root (`node`, uid 1000). If the host `./data` directory is not owned by uid 1000 (common on NAS devices like Synology), run once before first start: `sudo chown -R 1000:1000 ./data`
+
 ## Common commands
 
 ```bash
@@ -112,6 +114,64 @@ docker compose logs -f          # follow logs
 docker compose restart          # restart
 docker compose down             # stop and remove container (data kept)
 ```
+
+## Backup & Restore
+
+All data (API key, config, cached collections) lives in the single file `data/mcard.db`.
+
+**Quick backup** (while running — copy the WAL trio for a consistent snapshot):
+
+```bash
+docker cp mcard:/app/data/mcard.db ./mcard.db.bak
+docker cp mcard:/app/data/mcard.db-wal ./mcard.db-wal.bak 2>/dev/null || true
+docker cp mcard:/app/data/mcard.db-shm ./mcard.db-shm.bak 2>/dev/null || true
+```
+
+**Safe backup** (a few seconds of downtime, most reliable):
+
+```bash
+docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
+```
+
+**Restore**: `docker compose down` → put the backed-up db (and -wal/-shm) back into `data/` → `docker compose up -d`.
+
+**Corrupted db rebuild** (symptom: startup fails with `SQLITE_CORRUPT` / `file is not a database`): restore a backup first; otherwise delete `data/mcard.db*` and restart — you'll need to re-enter the API key and re-collect. Historical data is unrecoverable, so back up regularly.
+
+## Upgrade & Rollback
+
+```bash
+# Upgrade (back up first! see above)
+docker compose down
+docker pull doc2page/mcard:latest        # or a pinned version like :1.2.1
+docker compose up -d
+
+# Rollback: change the image tag in docker-compose.yml back to the previous version, then up -d
+```
+
+Data stays backward-compatible across versions (patch/minor releases never change the storage format). See [Releases](https://github.com/doc2page/mcard/releases) for the changelog.
+
+## Security Notes
+
+- **Both the API key and the access password travel in plain text over HTTP.** Fine on a LAN/Tailscale; **public exposure requires an HTTPS reverse proxy in front**. Minimal Caddy config:
+
+  ```
+  mcard.example.com {
+      reverse_proxy 127.0.0.1:31414
+  }
+  ```
+
+- The container runs as non-root (`node`, uid 1000); `HOST=0.0.0.0` listens on all interfaces — never expose it to untrusted networks
+- The API key (for M-TEAM access) and `AUTH_PASSWORD` (for page access) are independent — set both
+
+## FAQ
+
+| Symptom | Fix |
+| --- | --- |
+| Container fails to start / can't write data | `./data` not owned by uid 1000 (common on NAS): `sudo chown -R 1000:1000 ./data`, then restart |
+| Page loads but collection fails | API key expired — re-enter the token in the UI (regenerate in M-TEAM user lab); check `docker compose logs -f` |
+| Data not refreshing | Collections have cooldowns (market 8s / holdings·drops 30s) — wait and retry; check the refresh button state |
+| Forgot the access password | Edit `AUTH_PASSWORD` in `.env`, then `docker compose up -d` — data is unaffected |
+| Won't start after upgrade | Roll back to the previous image tag (see Upgrade & Rollback), then [open an issue](https://github.com/doc2page/mcard/issues) |
 
 ## Local development (without Docker)
 

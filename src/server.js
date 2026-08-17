@@ -94,6 +94,21 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
 }
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  createServer();
+  const { server, store } = createServer();
   console.log('[mcard] server started');
+  // 优雅退出：docker stop/restart 发 SIGTERM → 停止接受新连接 → 关 SQLite（WAL 落盘）→ 退出。
+  // SSE 长连接会挂住 server.close 回调，5s 兜底强退（快于 docker 默认 10s SIGKILL）。
+  let _closing = false;
+  function shutdown(sig) {
+    if (_closing) return;
+    _closing = true;
+    console.log('[mcard] shutting down (' + sig + ')...');
+    server.close(() => {
+      try { store.close(); } catch (e) { /* db 已关闭 */ }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000).unref();
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }

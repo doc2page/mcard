@@ -74,6 +74,8 @@ docker compose up -d
 - **纯手动触发**：所有采集 / 交易均由页面点击触发，**无后台轮询**（反风控）。
 - **单用户**：API Key 管 M-TEAM 访问，`AUTH_PASSWORD` 管页面访问，二者独立。
 - **网络安全**：`HOST=0.0.0.0` 监听所有网卡——请部署在可信网络（家庭局域网 / Tailscale 等）。局域网 HTTP 下密码明文传输，需加密请在前面加 HTTPS 反代（Caddy / Nginx）。
+- **非 root 运行**：容器以 `node`（uid 1000）运行——宿主 `./data` 需 uid 1000 可写（NAS 用户：`sudo chown -R 1000:1000 ./data`）。
+- **备份**：数据全在 `data/mcard.db` 单文件——`docker compose down && cp -r data backup-$(date +%F) && docker compose up -d`。升级前先备份；详见 README「数据备份与恢复 / 升级与回滚」。
 
 ## 🏗️ 自建 / Build from source
 
