@@ -328,6 +328,8 @@ body.privacy-on .md-ut-act { filter: blur(5px); }
   background: linear-gradient(180deg, var(--surface), var(--bg-2));
 }
 .budget-bar-wrap .pc-budget { margin: 0; padding: 0; border: none; }
+/* 移动端预算条（市场工具行右侧 #budgetBarMobile）：基础隐藏——仅 ≤944px × market view × 未设预算(.off 藏) 时显示 */
+.budget-mobile { display: none; }
 .pc-empty { font-size: 11px; color: var(--muted); }
 
 /* 「我的」面板（sidebar）：资料卡 + 交易/挂单入口；预算条在顶栏 */
@@ -349,12 +351,12 @@ body.privacy-on .md-ut-act { filter: blur(5px); }
 .topbar > .budget-bar-wrap .pc-budget-label { font-size: 10.5px; letter-spacing: 0.1em; }
 .topbar > .budget-bar-wrap .pc-budget-val { font-size: 12px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
 .topbar > .budget-bar-wrap .pc-budget-bar { height: 8px; border-radius: 4px; margin-top: 6px; background: var(--bg-2); }
-.topbar > .budget-bar-wrap .pc-budget.pct-high .pc-budget-fill { background: linear-gradient(90deg, #1ea85f, var(--up)); box-shadow: 0 0 10px color-mix(in srgb, var(--up) 45%, transparent); }
-.topbar > .budget-bar-wrap .pc-budget.pct-high .pc-budget-val { color: var(--up); }
-.topbar > .budget-bar-wrap .pc-budget.pct-mid .pc-budget-fill { background: linear-gradient(90deg, var(--accent-2), var(--accent)); box-shadow: 0 0 10px var(--accent-glow); }
-.topbar > .budget-bar-wrap .pc-budget.pct-mid .pc-budget-val { color: var(--accent); }
-.topbar > .budget-bar-wrap .pc-budget.pct-low .pc-budget-fill { background: linear-gradient(90deg, #ff3b5c, var(--down)); box-shadow: 0 0 10px color-mix(in srgb, var(--down) 50%, transparent); }
-.topbar > .budget-bar-wrap .pc-budget.pct-low .pc-budget-val { color: var(--down); }
+.topbar > .budget-bar-wrap .pc-budget.pct-high .pc-budget-fill, .budget-mobile .pc-budget.pct-high .pc-budget-fill { background: linear-gradient(90deg, #1ea85f, var(--up)); box-shadow: 0 0 10px color-mix(in srgb, var(--up) 45%, transparent); }
+.topbar > .budget-bar-wrap .pc-budget.pct-high .pc-budget-val, .budget-mobile .pc-budget.pct-high .pc-budget-val { color: var(--up); }
+.topbar > .budget-bar-wrap .pc-budget.pct-mid .pc-budget-fill, .budget-mobile .pc-budget.pct-mid .pc-budget-fill { background: linear-gradient(90deg, var(--accent-2), var(--accent)); box-shadow: 0 0 10px var(--accent-glow); }
+.topbar > .budget-bar-wrap .pc-budget.pct-mid .pc-budget-val, .budget-mobile .pc-budget.pct-mid .pc-budget-val { color: var(--accent); }
+.topbar > .budget-bar-wrap .pc-budget.pct-low .pc-budget-fill, .budget-mobile .pc-budget.pct-low .pc-budget-fill { background: linear-gradient(90deg, #ff3b5c, var(--down)); box-shadow: 0 0 10px color-mix(in srgb, var(--down) 50%, transparent); }
+.topbar > .budget-bar-wrap .pc-budget.pct-low .pc-budget-val, .budget-mobile .pc-budget.pct-low .pc-budget-val { color: var(--down); }
 .topbar > .budget-bar-wrap .pc-budget-warn { font-size: 9.5px; }
 .my-trades-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .my-trades-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
@@ -1664,6 +1666,13 @@ body.no-token .layout > main { display: none !important; }
   .pt-chart-row { grid-template-columns: 1fr; }
   .pt-panel-grid { grid-template-columns: repeat(2, 1fr); }
   .pt-nickname { font-size: 22px; }
+  /* 移动端预算魔力池：顶栏版隐藏（300px 悬浮卡曾遮盖顶栏 brand/按钮），改市场工具行右侧紧凑版 */
+  .topbar > .budget-bar-wrap { display: none !important; }
+  .budget-mobile .pc-budget { margin: 0; padding: 0; border: none; }
+  .budget-mobile .pc-budget-label { font-size: 9px; letter-spacing: 0.06em; }
+  .budget-mobile .pc-budget-val { font-size: 11px; font-weight: 700; }
+  .budget-mobile .pc-budget-bar { height: 4px; margin-top: 3px; }
+  .budget-mobile .pc-budget-warn { display: none; }  /* 移动版精简：告警行藏（值颜色已分级提示） */
   /* 我的卡册：单列紧凑（poster 对齐移动端卡片 115px；矩阵间距压缩防溢出，flex 收缩自适应屏宽） */
   .cb-grid { grid-template-columns: 1fr; gap: 10px; }
   .cb-card { padding: 8px; gap: 8px; border-radius: 13px; contain-intrinsic-size: auto 188px; }
@@ -1973,6 +1982,12 @@ body.no-token .layout > main { display: none !important; }
 .stats-fold-head:has(+ .trade-stats.unfolded) .sf-caret { transform: rotate(180deg); }
 
 @media (max-width: 944px) {
+  /* 移动端预算魔力池：顶栏版隐藏（300px 悬浮卡遮盖顶栏 brand/按钮）→ 市场工具行右侧显示紧凑版 */
+  .topbar > .budget-bar-wrap { display: none !important; }
+  body[data-view="market"] .budget-mobile:not(.off) {
+    display: flex; flex-direction: column; justify-content: center;
+    max-width: 44vw;
+  }
   /* hamburger 按钮：移动端显示 */
   .menu-toggle {
     display: inline-flex; align-items: center; justify-content: center;
