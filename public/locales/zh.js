@@ -345,7 +345,7 @@ registerMessages('zh', {
   'err.buyBudgetNotSet': '请先在侧边栏设置「预算魔力池」后再购买',
   'err.balanceInsufficient': '账户余额不足——请到 M-TEAM 充值魔力值后重试',
   'err.budgetRemainingInsufficient': '预算剩余不足——可在侧栏「预算魔力池」提高总额或重置已花费',
-  'err.buyBudgetInsufficientToast': ' · 本张 {price} > 可用 {usable} 魔力',
+  'err.buyBudgetInsufficientToast': ' · 本次 {price} > 可用 {usable} 魔力',
   'err.presetNameRequired': '请输入方案名称',
   'err.importInvalidJson': '校验失败：不是有效的 JSON',
   'err.importMissingConfig': '校验失败：缺少 config 字段，可能不是本扩展的导出文件',

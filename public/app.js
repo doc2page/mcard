@@ -4150,6 +4150,15 @@ function openBatchModify() {
 function openBatchBuy() {
   var cards = marketSelectedItems();
   if (!cards.length) return;
+  // 前置预算校验（与单卡 onBuy / runBatchOp 同口径，详细带指引）：未设预算池 / 可用额度小于所选总价 → 直接 toast，不开模态
+  var u = computeUsable(state);
+  if (u.bTotal <= 0) { showToast(t('err.buyBudgetNotSet'), 'error'); return; }
+  var sum = cards.reduce(function (a, c) { return a + (Number(c.lowestAsk) || 0); }, 0);
+  if (sum > u.usable) {
+    var reason = u.bonus < u.remaining ? t('err.balanceInsufficient') : t('err.budgetRemainingInsufficient');
+    showToast(reason + t('err.buyBudgetInsufficientToast', { price: fmtNum(sum), usable: fmtNum(u.usable) }), 'error');
+    return;
+  }
   openBatchModal('buy', cards.map(function (c) { return makeBatchItem('buy', c, 0); }));
 }
 

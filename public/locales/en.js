@@ -340,7 +340,7 @@ registerMessages('en', {
   'err.buyBudgetNotSet': 'Set the "Bonus budget pool" in the sidebar before buying',
   'err.balanceInsufficient': 'Account balance insufficient — top up Magic Points on M-TEAM and retry',
   'err.budgetRemainingInsufficient': 'Budget remaining insufficient — raise the total or reset spent in the Bonus budget panel',
-  'err.buyBudgetInsufficientToast': ' · this card {price} > usable {usable} Bonus',
+  'err.buyBudgetInsufficientToast': ' · this order {price} > usable {usable} Bonus',
   'err.presetNameRequired': 'Please enter a scheme name',
   'err.importInvalidJson': 'Validation failed: not valid JSON',
   'err.importMissingConfig': 'Validation failed: missing config field, likely not an export of this extension',
