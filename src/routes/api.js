@@ -58,6 +58,12 @@ export function createApiRouter({ state, collector, trader, mteam }) {
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
 
+  router.post('/api/redemption', async (req, res) => {   // 普通卡兑换机制卡（10 换 1）：双重校验在 trader.redemption
+    try {
+      res.json(await trader.redemption(req.body || {}));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
+
   router.get('/api/orderbook', async (req, res) => {
     const { filmId, provenance, rarity } = req.query;
     try {

@@ -2189,3 +2189,56 @@ body.no-token .layout > main { display: none !important; }
   .sp-word span { opacity: 1; }
   .sp-ring { opacity: 0.6; }
 }
+
+/* ============ 普通卡兑换机制卡（10 换 1） ============ */
+.redeem-wrap { display: flex; flex-direction: column; gap: 8px; width: 100%; grid-column: 1 / -1; height: 100%; }  /* tstat-body 是 grid：跨满整行+撑满行高（组与旁组等高，内部两行弹性均分防底部空白） */
+.redeem-wrap > .redeem-cards { flex: 1 1 0; }   /* 第一行可兑卡：弹性占一半 */
+.redeem-wrap .redeem-card { justify-content: center; align-items: center; text-align: center; }  /* 拉高后内容垂直居中 + 文字水平居中 */
+.redeem-cards { display: flex; gap: 8px; width: 100%; }
+.redeem-card {
+  flex: 1 1 0; min-width: 0;   /* 三卡均分行宽 */
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border); border-left: 3px solid var(--rc, var(--border));
+  border-radius: 10px;
+  background: var(--surface-2);
+  cursor: pointer; text-align: left;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.redeem-card.r-N { --rc: var(--r-N); }
+.redeem-card.r-SR { --rc: var(--r-SR); }
+.redeem-card.r-UR { --rc: var(--r-UR); }
+.redeem-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.redeem-card.none { opacity: 0.55; }
+.redeem-card.active { border-color: var(--accent); background: var(--accent-soft); }
+.redeem-card-name { font-size: 12px; font-weight: 800; color: var(--text); }
+.redeem-card-from { font-size: 10px; color: var(--muted); letter-spacing: 0.04em; }
+.redeem-card-n { font-size: 11px; font-weight: 700; color: var(--muted); }
+.redeem-card-n.ok { color: var(--up); }
+/* 兑换模式：稀有度/来源筛选灰显锁定（称号筛选保留可用，按 data-fgroup 区分） */
+.redeem-lock-filter .chip[data-fgroup="rarity"],
+.redeem-lock-filter .chip[data-fgroup="source"] { opacity: 0.35; pointer-events: none; }
+/* 兑换确认模态：10 张卡清单 */
+.redeem-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; margin-top: 10px; }
+.redeem-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 12px; }
+.redeem-row-r { flex: 0 0 30px; text-align: center; font-size: 10px; font-weight: 800; padding: 1px 0; border-radius: 5px; }
+.redeem-row-r.r-N { background: color-mix(in srgb, var(--r-N) 20%, transparent); color: var(--r-N); }
+.redeem-row-r.r-SR { background: color-mix(in srgb, var(--r-SR) 20%, transparent); color: var(--r-SR); }
+.redeem-row-r.r-UR { background: color-mix(in srgb, var(--r-UR) 20%, transparent); color: var(--r-UR); }
+.redeem-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.redeem-row-title { flex: none; font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.redeem-row-title.tt-1, .redeem-row-title.tt-2, .redeem-row-title.tt-3 { background: #7e8694; color: #fff; }
+.redeem-row-title.tt-4 { background: #9b8cff; color: #fff; }
+.redeem-row-title.tt-5 { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--on-accent); }
+.redeem-row-title.none { color: var(--faint); }
+/* 兑换：第二行「已兑换」嵌套大卡（外框包 3 紧凑小卡，与第一行拉开层级）+ 浮动面板兑换按钮主题色 */
+.redeem-done-box { flex: 1 1 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.redeem-done-box .redeem-cards { flex: 1 1 0; }
+.redeem-done-title { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); }
+.redeem-card.redeem-done { cursor: default; border-left-style: dashed; padding: 5px 8px; gap: 1px; }
+.redeem-card.redeem-done:hover { transform: none; border-color: var(--border); }
+.redeem-card.redeem-done .redeem-card-name { font-size: 11px; }
+.redeem-card.redeem-done .redeem-card-n { font-size: 10px; }
+.seg-btn.mini.redeem-go { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 700; }
+.seg-btn.mini.redeem-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); }
+.seg-btn.mini.redeem-go:disabled { opacity: 0.45; }

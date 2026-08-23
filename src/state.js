@@ -36,6 +36,7 @@ const DEFAULT_STATE = {
   cardLogSummary: null,
   cancelFailedOrders: [],
   marketHistory: [],
+  redemptions: [],   // 兑换历史：[{ recipeId, mechType, count, at }]（本地记录，前端统计卡展示）
   inventory: [],
   mechInventory: [],
   inventoryTotal: 0,

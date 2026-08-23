@@ -142,5 +142,42 @@ export function createTrader({ state, mteam, collector }) {
     return { ok: true };
   }
 
-  return { buyCard, sellCard, cancelOrder };
+  // 普通卡兑换机制卡：恰好 10 张同稀有度普通卡 → 1 张机制符。recipeId 1=魔力符(N) 2=置顶免费符(SR) 3=VIP符(UR)。
+  // 后端双重校验（前端已拦，防前端状态过期/绕过）：10 个不同 cardId + state.inventory 回查均为普通卡、稀有度匹配、未手动锁定。
+  // 挂单卡不在 inventory（回查 miss 即拒）；冷却卡（tradeLockUntil）可兑，官方允许。
+  const REDEMPTION_RECIPES = {
+    1: { rarity: 'N', mechType: 'mana_voucher' },
+    2: { rarity: 'SR', mechType: 'single_free' },
+    3: { rarity: 'UR', mechType: 'vip_7d' },
+  };
+  async function redemption(msg) {
+    const recipe = REDEMPTION_RECIPES[msg.recipeId];
+    const cardIds = Array.isArray(msg.cardIds) ? msg.cardIds : [];
+    if (!recipe) return { ok: false, reason: 'unknown_recipe' };
+    if (cardIds.length !== 10) return { ok: false, reason: 'need_exact_10' };
+    const ids = Array.from(new Set(cardIds.map(Number)));
+    if (ids.length !== 10) return { ok: false, reason: 'need_exact_10' };  // 有重复 cardId
+    const st = await state.getState();
+    const byId = new Map((st.inventory || []).map((c) => [String(c.cardId), c]));
+    const locked = new Set(((st.config && st.config.lockedCards) || []).map(String));
+    for (const id of ids) {
+      const c = byId.get(String(id));
+      if (!c || isMechCard(c) || c.rarity !== recipe.rarity) return { ok: false, reason: 'card_mismatch', cardId: id };
+      if (locked.has(String(id))) return { ok: false, reason: 'card_locked', cardId: id };
+    }
+    let json;
+    try {
+      json = await mtFetch('/api/pt-card/redemption/submit', { cardIds: ids, recipeId: Number(msg.recipeId) });
+    } catch (e) {
+      return { ok: false, reason: 'redeem_failed' };  // API_KEY_INVALID / 网络错
+    }
+    if (!json || String(json.code) !== '0' || !json.data) return { ok: false, reason: 'redeem_failed' };
+    const reward = (json.data && json.data.reward) || {};
+    // 本地记录兑换历史（前端统计卡展示已兑换分类/数量；写前重读防覆盖并发写）
+    const st2 = await state.getState();
+    await state.update({ redemptions: (st2.redemptions || []).concat([{ recipeId: Number(msg.recipeId), mechType: reward.mechType || recipe.mechType, count: ids.length, at: Date.now() }]) });
+    return { ok: true, mechType: reward.mechType || recipe.mechType, mechCardId: reward.mechCardId || null };
+  }
+
+  return { buyCard, sellCard, cancelOrder, redemption };
 }

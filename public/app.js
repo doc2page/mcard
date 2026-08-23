@@ -609,6 +609,7 @@ function triggerMarketRefresh(force) {
 
 function toggleView(v) {
   view = v;
+  if (v !== 'inventory') redeemMode = null;   // 切出持有 view：退出兑换子模式
   document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）
   if (batchInView && batchInView !== v) clearBatchSelection(false);  // 切 view 清批量选择（renderLive 会重绘新 view）
   // 切视图失效签名缓存：market/trades/orders/inventory 复用同一 grid，非市场视图清子节点但不清 _sig；
@@ -1595,6 +1596,8 @@ function showOrderHistory(cardId, head) {
 function renderInventory() {
   buildInventoryChips();
   renderInventoryStats();
+  const isc = $('inventorySearch');
+  if (isc) isc.classList.toggle('redeem-lock-filter', !!redeemMode);  // 兑换模式：稀有度/来源筛选灰显锁定（称号可用），CSS 按 data-fgroup 区分
   const grid = $('grid');
   grid.classList.toggle('no-anim', grid.children.length > 0);
   const all = ((state && state.inventory) || []).concat(((state && state.mechInventory) || []).filter((m) => !m.isUsed));
@@ -1609,11 +1612,16 @@ function renderInventory() {
   }
   const openSell = ((state && state.ordersAll) || []).filter((o) => o.status === 'open' && o.side === 'sell').length;
   const total = all.length + openSell;
-  $('resultSummary').replaceChildren(
-    el('span', { text: t('inv.summaryPrefix') }),
-    el('b', { text: String(total) }),
-    el('span', { text: filtered ? t('inv.summaryFilteredSuffix', { n: list.length }) : t('inv.summarySuffix') })
-  );
+  const rs = $('resultSummary');
+  if (redeemMode && REDEEM_RECIPES[redeemMode]) {
+    rs.replaceChildren(el('span', { text: t('redeem.modeSummary', { rarity: REDEEM_RECIPES[redeemMode].rarity }) }));
+  } else {
+    rs.replaceChildren(
+      el('span', { text: t('inv.summaryPrefix') }),
+      el('b', { text: String(total) }),
+      el('span', { text: filtered ? t('inv.summaryFilteredSuffix', { n: list.length }) : t('inv.summarySuffix') })
+    );
+  }
   grid.replaceChildren();
   if (!list.length) {
     const empty = el('div', { cls: 'empty' });
@@ -1624,6 +1632,7 @@ function renderInventory() {
     return;
   }
   list.forEach((it, i) => grid.appendChild(buildInventoryCard(it, Math.min(i, 40) * 25)));
+  updateRedeemLockVisual();   // 兑换模式：选满 10 后未选中卡灰显（进入模式/自动选/清选后重绘时机统一在此刷新）
 }
 
 // 持有卡片统计：总持有 / 可交易 / 锁定中 / 稀有度分布（含机制卡）
@@ -1725,6 +1734,7 @@ function renderInventoryStats() {
     metric(t('inv.metricRarity'), hasRarity ? rarityTags : '—', null, 'metric-wide metric-vcenter metric-dist'),
     metric(t('inv.metricSource'), hasProv ? provTags : '—', null, 'metric-wide metric-vcenter metric-dist')
   ));
+  append(box, statGroup('gift', '♻️', t('redeem.groupTitle'), buildRedeemCards()));  // 兑换统计卡（3 配方可兑数量）
 }
 
 // ============ 掉落统计视图（独立 view，精美数据展示，不复用 statGroup/metric） ============
@@ -3605,8 +3615,169 @@ function portraitKpi(label, val, sub) {
 }
 
 // 持有卡片筛选：文本(片名/称号/serial/稀有度) + 稀有度/机制卡多选
+// ============ 普通卡兑换机制卡（10 换 1，销毁性操作） ============
+// 前端配方镜像（后端 trader.js 同源校验）：1=魔力符(N) 2=置顶免费符(SR) 3=VIP符(UR)
+const REDEEM_RECIPES = {
+  1: { rarity: 'N', mechType: 'mana_voucher', labelKey: 'redeem.recipe1' },
+  2: { rarity: 'SR', mechType: 'single_free', labelKey: 'redeem.recipe2' },
+  3: { rarity: 'UR', mechType: 'vip_7d', labelKey: 'redeem.recipe3' },
+};
+var redeemMode = null;   // null | 1|2|3：持有 view 的兑换子模式（叠加态，切 view 退出）
+
+// 兑换统计组：第一行 3 配方小卡片均分行宽（可兑数量 = 非机制卡+对应稀有度+未挂单(inventory 天然)+剔除手动锁定，÷10 取整），
+// 第二行信息卡：已兑换分类/数量（读本地 redemptions 历史）。点击小卡进入/退出兑换模式。
+function buildRedeemCards() {
+  const wrap = el('div', { cls: 'redeem-wrap' });
+  const row = el('div', { cls: 'redeem-cards' });
+  const inv = (state && state.inventory) || [];
+  Object.keys(REDEEM_RECIPES).forEach((id) => {
+    const rc = REDEEM_RECIPES[id];
+    const usable = inv.filter((c) => !isMechCard(c) && (c.rarity || 'N') === rc.rarity && !isUserLocked(c)).length;
+    const n = Math.floor(usable / 10);
+    const card = el('button', { cls: 'redeem-card r-' + rc.rarity + (Number(redeemMode) === Number(id) ? ' active' : '') + (n <= 0 ? ' none' : ''), attrs: { type: 'button' } });
+    append(card,
+      el('div', { cls: 'redeem-card-name', text: t(rc.labelKey) }),
+      el('div', { cls: 'redeem-card-from', text: t('redeem.recipeFrom', { rarity: rc.rarity }) }),
+      el('div', { cls: 'redeem-card-n' + (n > 0 ? ' ok' : ''), text: t('redeem.unit', { n: n }) })
+    );
+    card.onclick = () => {
+      if (redeemMode === Number(id)) redeemMode = null;           // 再点同配方：退出
+      else { redeemMode = Number(id); clearBatchSelection(false); batchInView = 'inventory'; }  // 进入/切换：清旧选择 + 浮动面板即时出现（0/10 + 自动选）
+      renderInventory();
+      renderFloatingBatch();
+    };
+    row.appendChild(card);
+  });
+  // 第二行：已兑换 3 小卡片（与第一行同风格均分，撑满兑换组；本地 redemptions 历史按配方聚合）
+  const hist = (state && state.redemptions) || [];
+  const byRecipe = {};
+  hist.forEach((h) => { byRecipe[h.recipeId] = (byRecipe[h.recipeId] || 0) + 1; });
+  // 「已兑换」嵌套大卡：外框 + 标题 + 内部 3 紧凑小卡（与第一行拉开层级，避免视觉重叠）
+  const doneBox = el('div', { cls: 'redeem-done-box' });
+  doneBox.appendChild(el('div', { cls: 'redeem-done-title', text: t('redeem.history') }));
+  const doneRow = el('div', { cls: 'redeem-cards' });
+  Object.keys(REDEEM_RECIPES).forEach((id) => {
+    const rc = REDEEM_RECIPES[id];
+    const n = byRecipe[id] || 0;
+    const dcard = el('div', { cls: 'redeem-card redeem-done r-' + rc.rarity + (n > 0 ? '' : ' none') });
+    append(dcard,
+      el('div', { cls: 'redeem-card-name', text: t(rc.labelKey) }),
+      el('div', { cls: 'redeem-card-n' + (n > 0 ? ' ok' : ''), text: n > 0 ? ('×' + n) : '—' })
+    );
+    doneRow.appendChild(dcard);
+  });
+  doneBox.appendChild(doneRow);
+  append(wrap, row, doneBox);
+  return wrap;
+}
+
+// 兑换模式选满 10 后：未选中卡灰显不可选（复用 batch-locked 灰显；点击拦截在 onBatchCardClick）
+function updateRedeemLockVisual() {
+  if (!redeemMode) return;
+  const full = batchSelected.size >= 10;
+  const grid = $('grid');
+  if (!grid) return;
+  grid.querySelectorAll('.card[data-card-id]').forEach((cardEl) => {
+    const id = cardEl.dataset.cardId;
+    if (full && !batchSelected.has(id)) cardEl.classList.add('batch-locked');  // dataset 与选中集均为 String cardId（normalizeInventory 已 String 化）
+    else if (!cardEl.dataset.tradeLocked) cardEl.classList.remove('batch-locked');  // 交易锁卡（渲染时已加）不误清
+  });
+}
+
+// 一键自动选：候选 = 兑换过滤结果再剔除锁定卡，按称号等级升序（无称号最前 → 傳火 → 薪王）取前 10；选后可手动增删
+function autoSelectRedeem() {
+  if (!redeemMode || !REDEEM_RECIPES[redeemMode]) return;
+  const all = ((state && state.inventory) || []).concat(((state && state.mechInventory) || []).filter((m) => !m.isUsed));
+  const cand = filterInventory(all).filter((c) => !isUserLocked(c));
+  cand.sort((a, b) => (CB_TITLE_WEIGHT[a.title] || 0) - (CB_TITLE_WEIGHT[b.title] || 0) || String(a.cardId).localeCompare(String(b.cardId)));
+  batchSelected = new Set(cand.slice(0, 10).map((c) => c.cardId));
+  batchInView = 'inventory';
+  renderInventory();        // 重绘选中视觉
+  renderFloatingBatch();    // 计数 10/10 + 兑换按钮解禁
+}
+
+// 兑换确认模态：10 张卡清单（片名/稀有度/称号）二次确认 → 提交（含前端最后安全检查；后端 trader.redemption 再校验一道）
+var _redeemBusy = false;
+function openRedeemConfirm() {
+  if (_redeemBusy || !redeemMode || !REDEEM_RECIPES[redeemMode]) return;
+  if (batchSelected.size !== 10) { showToast(t('redeem.needTen'), 'error'); return; }
+  const rc = REDEEM_RECIPES[redeemMode];
+  const inv = (state && state.inventory) || [];
+  const picked = Array.from(batchSelected).map((id) => inv.find((c) => String(c.cardId) === String(id))).filter(Boolean);
+  if (picked.length !== 10) { showToast(t('redeem.reason.need_exact_10'), 'error'); return; }         // 有 id 不在持有列表（挂单/已兑）
+  const bad = picked.find((c) => isMechCard(c) || (c.rarity || 'N') !== rc.rarity || isUserLocked(c));
+  if (bad) { showToast(t('redeem.reason.card_mismatch', { card: cardName(bad) }), 'error'); return; } // 稀有度/状态不匹配
+  const restoreFocus = modalFocusRestore();
+  const mask = el('div', { cls: 'modal-mask' });
+  const box = el('div', { cls: 'modal redeem-modal' });
+  const head = el('div', { cls: 'modal-head' });
+  append(head, el('div', { cls: 'modal-icon', text: '♻️' }), el('div', { cls: 'modal-title', text: t('redeem.confirmTitle') }));
+  const body = el('div', { cls: 'modal-body' });
+  body.appendChild(el('div', { cls: 'modal-note', text: t('redeem.confirmNote', { reward: t(rc.labelKey) }) }));
+  const list = el('div', { cls: 'redeem-list' });
+  picked.forEach((c) => {
+    const row = el('div', { cls: 'redeem-row' });
+    const tier = c.title ? (TITLE_TIER[c.title] || 'tt-5') : null;
+    append(row,
+      el('span', { cls: 'redeem-row-r r-' + (c.rarity || 'N'), text: c.rarity || 'N' }),
+      el('span', { cls: 'redeem-row-name', attrs: { title: c.filmName || '' }, text: c.filmName || t('card.unnamed') }),
+      tier ? el('span', { cls: 'redeem-row-title ' + tier, text: c.title }) : el('span', { cls: 'redeem-row-title none', text: '—' })
+    );
+    list.appendChild(row);
+  });
+  body.appendChild(list);
+  const actions = el('div', { cls: 'modal-actions' });
+  const cancelBtn = el('button', { cls: 'btn ghost', text: t('common.cancel') });
+  const okBtn = el('button', { cls: 'btn primary', text: t('redeem.confirmBtn') });
+  append(actions, cancelBtn, okBtn);
+  append(box, head, body, actions);
+  mask.appendChild(box);
+  document.body.appendChild(mask);
+  requestAnimationFrame(() => mask.classList.add('show'));
+  setTimeout(() => { try { okBtn.focus(); } catch (e) {} }, 60);
+  let done = false;
+  function close() {
+    if (done) return;
+    done = true;
+    document.removeEventListener('keydown', onKey);
+    mask.classList.remove('show');
+    setTimeout(() => { mask.remove(); restoreFocus(); }, 220);
+  }
+  const onKey = (e) => { if (e.key === 'Escape' && !_redeemBusy) close(); };
+  document.addEventListener('keydown', onKey);
+  cancelBtn.onclick = () => { if (!_redeemBusy) close(); };
+  okBtn.onclick = async () => {
+    if (_redeemBusy) return;   // 单飞锁：防连点双提交（销毁性操作）
+    _redeemBusy = true;
+    okBtn.disabled = true;
+    okBtn.textContent = t('redeem.submitting');
+    let r = null;
+    try {
+      r = await send({ type: 'REDEEM', cardIds: picked.map((c) => Number(c.cardId)), recipeId: redeemMode });
+    } catch (e) { r = null; }
+    _redeemBusy = false;
+    okBtn.disabled = false;
+    okBtn.textContent = t('redeem.confirmBtn');
+    close();
+    if (r && r.ok) {
+      showToast(t('redeem.success', { name: mechLabel(r.mechType) || t(REDEEM_RECIPES[redeemMode].labelKey) }), 'success');
+      redeemMode = null;
+      clearBatchSelection(false);
+      send({ type: 'LOAD_INVENTORY' });   // 兑换销毁 10 卡 + 机制卡持有变化，刷新采集
+      renderInventory();
+    } else {
+      const reason = r && r.reason ? t('redeem.reason.' + r.reason, r) : t('redeem.reason.redeem_failed');
+      showToast(t('redeem.fail', { reason: reason }), 'error');
+    }
+  };
+}
+
 function filterInventory(list) {
-  const f = inventoryFilter;
+  // 兑换子模式：强制稀有度=配方档、排除机制卡、忽略来源/交易锁筛选（称号筛选保留可用——用户约定）；
+  // showLocked 语义照旧（锁定卡默认隐藏，开启后可见、选卡层拦截）
+  const f = redeemMode && REDEEM_RECIPES[redeemMode]
+    ? Object.assign({}, inventoryFilter, { rarities: new Set([REDEEM_RECIPES[redeemMode].rarity]), mech: false, source: new Set(), lock: false })
+    : inventoryFilter;
   const text = (f.text || '').trim().toLowerCase();
   const kws = text ? text.split(/\s+/).filter(Boolean) : [];
   const hasRarity = f.mech || (f.rarities && f.rarities.size > 0);
@@ -3849,6 +4020,11 @@ function onBatchCardClick(card, cardEl, view) {
     showToast(t('card.ownListing'));
     return;
   }
+  // 兑换子模式（持有）：锁定卡禁选（先解锁）；每批恰好 10 张，选满封顶
+  if (redeemMode && view === 'inventory') {
+    if (isUserLocked(card)) { showToast(t('redeem.lockedCard'), 'info'); return; }
+    if (!batchSelected.has(card.cardId) && batchSelected.size >= 10) { showToast(t('redeem.fullTen'), 'info'); return; }
+  }
   if (batchInView && batchInView !== view) batchSelected = new Set();  // 跨 view 不混选
   batchInView = view;
   var id = batchIdOf(card);
@@ -3861,24 +4037,30 @@ function onBatchCardClick(card, cardEl, view) {
     var chk = cardEl.querySelector('.batch-check');
     if (chk) chk.classList.toggle('checked', nowSel);
   }
+  updateRedeemLockVisual();   // toggle 后即时更新满员灰显（选中/取消使集合跨越 10；内部 redeemMode 判定）
   renderFloatingBatch();
 }
 
-// 悬浮批量面板：batchSelected 非空时显示计数 + 操作按钮 + 清除
+// 悬浮批量面板：batchSelected 非空时显示计数 + 操作按钮 + 清除；兑换模式 0 张也显示（进入即出面板，方便一键自动选）
 function renderFloatingBatch() {
   var panel = $('batchFloating');
   if (!panel) return;
   var n = batchSelected.size;
-  if (n === 0) { panel.hidden = true; return; }
+  var isRedeem = !!(redeemMode && batchInView === 'inventory');
+  if (n === 0 && !isRedeem) { panel.hidden = true; return; }
   panel.hidden = false;
-  $('batchFloatCount').textContent = t('batch.selected', { n: n });
+  $('batchFloatCount').textContent = isRedeem ? (n + ' / 10') : t('batch.selected', { n: n });  // 兑换模式计数 X/10
   var actions = $('batchFloatActions');
   actions.replaceChildren();
-  function addBtn(key, fn) {
-    var b = el('button', { cls: 'seg-btn mini', attrs: { type: 'button' }, text: t(key) });
+  function addBtn(key, fn, cls, disabled) {
+    var b = el('button', { cls: 'seg-btn mini' + (cls ? ' ' + cls : ''), attrs: { type: 'button' }, text: t(key) });
+    if (disabled) b.disabled = true;
     b.onclick = fn; actions.appendChild(b);
   }
-  if (batchInView === 'inventory') { addBtn('batch.lock', lockSelected); addBtn('batch.sell', openBatchSell); }
+  if (batchInView === 'inventory') {
+    if (redeemMode) { addBtn('redeem.autoSelect', autoSelectRedeem); addBtn('redeem.redeem', openRedeemConfirm, 'redeem-go', n !== 10); }  // 未满 10 禁用；主题色高亮
+    else { addBtn('batch.lock', lockSelected); addBtn('batch.sell', openBatchSell); }
+  }
   else if (batchInView === 'orders') { addBtn('batch.cancel', openBatchCancel); addBtn('batch.modify', openBatchModify); }
   else if (batchInView === 'market') addBtn('batch.buy', openBatchBuy);
 }
@@ -4309,12 +4491,13 @@ function buildInventoryCard(it, delay) {
   const locked = Number.isFinite(lockUntil) && lockUntil > now;
 
   const card = el('div', { cls: 'card inventory-card' });
+  card.dataset.cardId = String(it.cardId || '');   // 兑换模式选满灰显（updateRedeemLockVisual）按 id 对照选中集
   card.style.animationDelay = delay + 'ms';
 
   card.classList.add('batch-mode');
   const tradeLocked = isCardLocked(it);   // 交易锁（tradeLockUntil，平台临时）
   const userLocked = isUserLocked(it);    // 手动锁（用户主动，持久）
-  if (tradeLocked) card.classList.add('batch-locked');        // 交易锁：灰显
+  if (tradeLocked) { card.classList.add('batch-locked'); card.dataset.tradeLocked = '1'; }  // 交易锁：灰显（标记防兑换灰显逻辑误清）
   if (userLocked) { card.classList.add('manual-locked'); card.appendChild(buildLockOverlay(it)); }  // 手动锁：磨砂蒙版 + 解锁按钮
   if (!tradeLocked && !userLocked) {      // 未锁：可选
     var chk = el('div', { cls: 'batch-check ' + (batchSelected.has(it.cardId) ? 'checked' : '') });
@@ -4377,8 +4560,8 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
   const box = $(boxId);
   if (!box) return;
   box.replaceChildren();
-  const mkChip = (cls, lbl, onClick) => {
-    const chip = el('button', { cls: 'chip ' + cls, attrs: { type: 'button' } });
+  const mkChip = (cls, lbl, onClick, fgroup) => {
+    const chip = el('button', { cls: 'chip ' + cls, attrs: { type: 'button', 'data-fgroup': fgroup || '' } });
     chip.appendChild(el('span', { cls: 'dot' }));
     chip.appendChild(document.createTextNode(lbl));
     chip.onclick = onClick;
@@ -4392,11 +4575,11 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
       if (filterObj.rarities.has(r)) filterObj.rarities.delete(r);
       else filterObj.rarities.add(r);
       renderFn();
-    }));
+    }, 'rarity'));
   });
   // 来源组：机制卡（所有 view）+ 掉落/制造（持有 withSource）
   groupLabel(t('inv.metricSource'));
-  box.appendChild(mkChip('r-mech' + (filterObj.mech ? ' on' : ''), t('cfg.mech'), () => { filterObj.mech = !filterObj.mech; renderFn(); }));
+  box.appendChild(mkChip('r-mech' + (filterObj.mech ? ' on' : ''), t('cfg.mech'), () => { filterObj.mech = !filterObj.mech; renderFn(); }, 'source'));
   if (withSource) {
     [['drop', t('inv.drop')], ['crafted', t('inv.crafted')]].forEach(([key, lbl]) => {
       const on = filterObj.source.has(key);
@@ -4404,7 +4587,7 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
         if (filterObj.source.has(key)) filterObj.source.delete(key);
         else filterObj.source.add(key);
         renderFn();
-      }));
+      }, 'source'));
     });
   }
   groupLabel(t('search.titleLabel'));
@@ -4414,7 +4597,7 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
       if (filterObj.titles.has(title)) filterObj.titles.delete(title);
       else filterObj.titles.add(title);
       renderFn();
-    }));
+    }, 'title'));
   });
   // 手动锁开关（持有独有）：称号后，文字 + 勾选框；默认隐藏手动锁卡，勾选后显示
   if (withLock) {
