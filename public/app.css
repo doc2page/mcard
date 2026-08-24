@@ -2242,3 +2242,25 @@ body.no-token .layout > main { display: none !important; }
 .seg-btn.mini.redeem-go { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 700; }
 .seg-btn.mini.redeem-go:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); }
 .seg-btn.mini.redeem-go:disabled { opacity: 0.45; }
+
+/* ============ 侧栏变化角标（红底白字胶囊，方案A） ============ */
+.my-trades-btn { position: relative; }  /* 角标定位锚 */
+.nav-badge {
+  position: absolute; top: -5px; right: -7px;
+  z-index: 3;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--down);
+  color: #fff;
+  font-size: 10px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: badgePop 0.25s cubic-bezier(0.3, 1.6, 0.4, 1);
+}
+.nav-badge.tmp { animation: badgePop 0.25s cubic-bezier(0.3, 1.6, 0.4, 1), badgeFadeOut 0.4s ease 4.6s forwards; }  /* 5s 闪现款：末段淡出 */
+@keyframes badgePop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes badgeFadeOut { to { transform: scale(0.6); opacity: 0; } }

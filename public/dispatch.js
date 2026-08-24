@@ -18,6 +18,7 @@ export function dispatch(msg) {
     case 'SELL_CARD':        return { method: 'POST', path: '/api/trade', body: { action: 'sell', cardId: msg.cardId, isMech: msg.isMech, netPrice: msg.netPrice, skipRefresh: msg.skipRefresh } };
     case 'CANCEL_ORDER':     return { method: 'POST', path: '/api/trade', body: { action: 'cancel', orderId: msg.orderId, skipRefresh: msg.skipRefresh } };
     case 'REDEEM':           return { method: 'POST', path: '/api/redemption', body: { cardIds: msg.cardIds, recipeId: msg.recipeId } };
+    case 'PROBE':            return { method: 'POST', path: '/api/totals', body: { ordersMaxId: msg.ordersMaxId } };
     case 'SET_CONFIG':       return { method: 'POST', path: '/api/setconfig', body: msg.config };
     case 'SAVE_API_KEY':     return { method: 'POST', path: '/api/config', body: { apiKey: msg.key, webBase: msg.webBase } };
     case 'SET_WEB_BASE':     return { method: 'POST', path: '/api/setconfig', body: { webBase: msg.webBase } };

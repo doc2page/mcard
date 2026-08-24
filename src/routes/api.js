@@ -64,6 +64,12 @@ export function createApiRouter({ state, collector, trader, mteam }) {
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
 
+  router.post('/api/totals', async (req, res) => {   // 轻量探测（变化角标）：只拿各接口 total 不写 state，60s 冷却在 collector.probeTotals
+    try {
+      res.json(await collector.probeTotals(req.body || {}));
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
+
   router.get('/api/orderbook', async (req, res) => {
     const { filmId, provenance, rarity } = req.query;
     try {

@@ -440,6 +440,44 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     return mtFetch('/api/pt-card/mechanism/list', {});
   }
 
+  // ============ 轻量探测（变化角标用）：只拿各接口 total，不写 state、不触发采集合并 ============
+  // 5 个小请求（pageSize=10；机制卡接口无分页、data 即全量按未使用过滤），串行 + randSleep 保持节奏。
+  // 60s 冷却：窗口内重复调用直接返回上次结果（防高频打开页面的请求放大，cached 标记）。
+  let _lastProbeAt = 0;
+  let _lastProbeTotals = null;
+  let _lastProbeArgs = '';
+  // msg.ordersMaxId：本地 ordersAll 最大记录 id——myorders 拉最新一页（pageSize=100，接口 lastId/status 参数均无效已实测），
+  // 数「id 大于该值的记录」= 新增挂单记录数（上架/下架/撤单不产生新记录，天然零误报；接口 total 是全部历史记录数，数字对比无意义）。
+  // 其余接口 total 对比即准确。
+  async function probeTotals(msg) {
+    const args = JSON.stringify(msg && msg.ordersMaxId);
+    if (_lastProbeTotals && Date.now() - _lastProbeAt < 8000 && args === _lastProbeArgs) return { ok: true, cached: true, totals: _lastProbeTotals };  // 8s 冷却（与市场刷新同级）；同参数才复用缓存
+    _lastProbeAt = Date.now();
+    _lastProbeArgs = args;
+    const totals = {};
+    const tryFetch = async (key, path, body, pick) => {
+      try {
+        const r = await mtFetch(path, body);
+        const v = pick(r);
+        totals[key] = Number.isFinite(v) ? v : null;   // 单项失败/异常置 null，前端跳过该项对比
+      } catch (e) { totals[key] = null; }
+      await randSleep(400, 900);
+    };
+    const pickTotal = (r) => Number(r && r.data && r.data.total) || 0;
+    await tryFetch('trades', '/api/pt-card/market/myTrades', { pageNumber: 1, pageSize: 10 }, pickTotal);
+    // myorders：最新一页 100 条，数 id > 本地最大记录 id 的条数 = 新增挂单记录（一页全超则封顶 100，角标 99+ 兜底）
+    const maxId = Number(msg && msg.ordersMaxId) || 0;
+    if (maxId > 0) {
+      await tryFetch('orders', '/api/pt-card/market/myorders', { pageNumber: 1, pageSize: 100 },
+        (r) => Array.isArray(r && r.data && r.data.data) ? r.data.data.filter((o) => Number(o.id) > maxId).length : 0);
+    } else totals.orders = 0;   // 本地无挂单记录（首用）：不产角标
+    await tryFetch('invNormal', '/api/pt-card/inventory', { pageNumber: 1, pageSize: 10 }, pickTotal);
+    await tryFetch('invMech', '/api/pt-card/mechanism/list', {}, (r) => Array.isArray(r && r.data) ? r.data.filter((x) => !x || !x.usedAt).length : 0);  // 未使用口径（对齐本地基准）
+    await tryFetch('marketData', '/api/pt-card/market/tradeHistory', { pageNumber: 1, pageSize: 10 }, pickTotal);
+    _lastProbeTotals = totals;
+    return { ok: true, totals };
+  }
+
   // ============ mybonus 直连（裸采集，无冷却 gate，由调用方按需触发）============
   async function fetchMyBonus() {
     const resp = await mtFetch('/api/tracker/mybonus', {});
@@ -661,6 +699,6 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     fetchProfile, fetchMyBonus,
     syncList, onProfileData, ensureMyTrades, ensureMyOrders, ensureMarketData,
     ensureCardLogs, ensureInventoryData, fetchMechanismList,
-    ensureDropStats, importDropMessages, queryOrderbook, searchMarket, refreshAll, setConfig, clearData,
+    ensureDropStats, importDropMessages, queryOrderbook, searchMarket, refreshAll, setConfig, clearData, probeTotals,
   };
 }

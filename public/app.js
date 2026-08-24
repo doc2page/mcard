@@ -152,12 +152,84 @@ function mergeObj(a, b) {
   }
   return out;
 }
+// ============ 侧栏变化角标 ============
+// 持久款：打开页面轻量探测（PROBE，只拿 total）与本地差值 → 进对应 view 清零；
+// 5s 闪现款：正看某 view 时该 view 数据变化（点按钮刷新/操作后 SSE 推送）→ 同款角标自动消失。
+var viewBadges = { trades: 0, orders: 0, inventory: 0, marketData: 0 };   // 掉落无轻量 total 接口，不做
+var BADGE_BTN = { trades: 'buyHistoryBtn', orders: 'ordersBtn', inventory: 'inventoryBtn', marketData: 'marketDataBtn' };
+
+function badgeSnapshot() {
+  return {
+    trades: (((state || {}).buyHistory) || []).length,
+    orders: (((state || {}).ordersAll) || []).filter((o) => o.status === 'open' && o.side === 'sell').length,
+    inventory: ((((state || {}).inventory) || []).length) + (((((state || {}).mechInventory) || []).filter((m) => !m.isUsed)).length),
+    marketData: (((state || {}).marketHistory) || []).length,
+  };
+}
+
+function renderBadges() {
+  Object.keys(BADGE_BTN).forEach((k) => {
+    const btn = $(BADGE_BTN[k]);
+    if (!btn) return;
+    var b = btn.querySelector('.nav-badge:not(.tmp)');
+    if (viewBadges[k] > 0) {
+      if (!b) { b = el('span', { cls: 'nav-badge' }); btn.appendChild(b); btn.classList.add('has-badge'); }
+      b.textContent = viewBadges[k] > 99 ? '99+' : String(viewBadges[k]);
+    } else if (b) { b.remove(); btn.classList.remove('has-badge'); }
+  });
+}
+
+// 5s 闪现角标（独立于持久款；同按钮可并存，tmp 类区分）
+function flashBadge(viewKey, n) {
+  const btn = $(BADGE_BTN[viewKey]);
+  if (!btn || n <= 0) return;
+  var old = btn.querySelector('.nav-badge.tmp');
+  if (old) old.remove();
+  const b = el('span', { cls: 'nav-badge tmp' });
+  b.textContent = n > 99 ? '99+' : String(n);
+  btn.appendChild(b);
+  setTimeout(() => { if (b && b.parentNode) b.remove(); }, 5000);
+}
+
+// 统一变化入口：正看该 view → 闪 5s（因持久角标刚进入的首次变化除外，见 _flashSuppressed）；否则累积持久角标
+var _flashSuppressed = null;   // { view }：带持久角标进入 view 时置位，进入后的首次该 view 变化不闪（一次性），停留期间后续变化恢复提醒
+function notifyViewDelta(viewKey, delta) {
+  if (!(viewKey in viewBadges) || !delta) return;
+  if (view === viewKey) {
+    if (_flashSuppressed && _flashSuppressed.view === viewKey) { _flashSuppressed = null; return; }
+    flashBadge(viewKey, Math.abs(delta));
+  }
+  else { viewBadges[viewKey] += Math.abs(delta); renderBadges(); }
+}
+
+// 打开页面轻量探测：PROBE（后端 5 小请求只拿 total，不写 state，60s 冷却）→ 与本地对比 → 持久角标
+function probeAndBadge() {
+  if (!state || !hasApiKey(state)) return;
+  const ordersMaxId = (((state.ordersAll) || []).reduce((m, o) => Math.max(m, Number(o.id) || 0), 0));   // 本地最大挂单记录 id（注意 ordersAll 是插入序非时间序，最新在尾部——遍历取 max）
+  send({ type: 'PROBE', ordersMaxId: ordersMaxId }).then((r) => {
+    if (!r || !r.ok || !r.totals) return;
+    const tt = r.totals;
+    const snap = badgeSnapshot();
+    if (tt.trades != null) notifyViewDelta('trades', tt.trades - snap.trades);                       // 交易只会增
+    if (tt.orders != null && tt.orders > 0) notifyViewDelta('orders', tt.orders);                   // 挂单 = lastId 增量新记录数（新挂单；上架/下架/撤单不产生新记录零误报）
+    if (tt.invNormal != null || tt.invMech != null) {
+      const dN = tt.invNormal != null ? Math.abs(tt.invNormal - ((state.inventory) || []).length) : 0;
+      const dM = tt.invMech != null ? Math.abs(tt.invMech - (((state.mechInventory) || []).filter((m) => !m.isUsed)).length) : 0;
+      notifyViewDelta('inventory', dN + dM);                                                        // 持有增减都算（普通+机制合计）
+    }
+    if (tt.marketData != null) notifyViewDelta('marketData', tt.marketData - snap.marketData);       // 市场数据只会增
+  }).catch(() => {});
+}
+
 function applyPatch(patch) {
   if (!state) state = {};
+  const before = badgeSnapshot();   // patch 前基准 → apply 后 diff（点按钮刷新/SSE 推送的变化统一在此感知）
   for (const k of Object.keys(patch || {})) {
     if (k === 'config') state.config = mergeObj(state.config || {}, patch.config || {});
     else state[k] = patch[k];
   }
+  const after = badgeSnapshot();
+  Object.keys(after).forEach((k) => { if (after[k] !== before[k]) notifyViewDelta(k, after[k] - before[k]); });
 }
 
 // SSE：后端 state 变更推送。增量合并 patch → renderAll/renderLive（采集落盘即触发，不再拉全量 /api/state）。
@@ -610,6 +682,10 @@ function triggerMarketRefresh(force) {
 function toggleView(v) {
   view = v;
   if (v !== 'inventory') redeemMode = null;   // 切出持有 view：退出兑换子模式
+  if (viewBadges[v] !== undefined && viewBadges[v] > 0) {
+    viewBadges[v] = 0; renderBadges();          // 进 view 清零持久角标（已看=已知悉）
+    _flashSuppressed = { view: v };             // 因角标而进：本次进入后的首次采集变化不闪 5s 角标（用户刚看过角标，再闪一次是打扰）
+  } else if (_flashSuppressed && _flashSuppressed.view !== v) _flashSuppressed = null;  // 无角标进入其它 view：清除抑制
   document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）
   if (batchInView && batchInView !== v) clearBatchSelection(false);  // 切 view 清批量选择（renderLive 会重绘新 view）
   // 切视图失效签名缓存：market/trades/orders/inventory 复用同一 grid，非市场视图清子节点但不清 _sig；
@@ -5722,6 +5798,7 @@ function applyLabUrl() {
   if (_langBtn) _langBtn.addEventListener('click', function () { setLang(getI18nLang() === 'en' ? 'zh' : 'en'); });
   initTheme();
   renderAll();
+  probeAndBadge();   // 启动轻量探测（变化角标；后端 5 小请求 8s 冷却）。注意：SSE open 分支那句是重连校准，首次 open 不执行——探测只挂这里
   // 移动端：交易/挂单/持有 顶部统计卡片折叠头（默认折叠，点击展开；头本身只在移动端+有数据时由 CSS 显示）
   ['tradeStats', 'ordersStats', 'inventoryStats'].forEach(function (id) {
     var box = document.getElementById(id);
