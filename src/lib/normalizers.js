@@ -47,6 +47,7 @@ export function normalizeMechanism(it) {
     rarity: it.rarity || 'N',
     type: it.type || '',
     serial: it.serial || '',
+    title: it.title || '傳火',   // 机制卡固定傳火称号（接口数据即如此）——持有 view 称号过滤依赖此字段；曾缺映射导致点任何称号 mech 全放行
     tradeLockUntil: it.tradeLockUntil || '',
     provenance: 'mech',
     isMech: true,
