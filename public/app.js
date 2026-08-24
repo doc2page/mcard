@@ -4107,7 +4107,7 @@ function onBatchCardClick(card, cardEl, view) {
   var nowSel;
   if (batchSelected.has(id)) { batchSelected.delete(id); nowSel = false; }
   else { batchSelected.add(id); nowSel = true; }
-  if (batchSelected.size === 0) batchInView = null;
+  if (batchSelected.size === 0 && !redeemMode) batchInView = null;  // 清空选择即收面板；兑换模式例外——面板常驻（0/10 + 自动选随时可用，取消到 0 张不消失）
   if (cardEl) {  // 直接更新被点卡片的选中视觉（避免整列重绘）
     cardEl.classList.toggle('selected', nowSel);
     var chk = cardEl.querySelector('.batch-check');
@@ -4573,9 +4573,9 @@ function buildInventoryCard(it, delay) {
   card.classList.add('batch-mode');
   const tradeLocked = isCardLocked(it);   // 交易锁（tradeLockUntil，平台临时）
   const userLocked = isUserLocked(it);    // 手动锁（用户主动，持久）
-  if (tradeLocked) { card.classList.add('batch-locked'); card.dataset.tradeLocked = '1'; }  // 交易锁：灰显（标记防兑换灰显逻辑误清）
+  if (tradeLocked && !redeemMode) { card.classList.add('batch-locked'); card.dataset.tradeLocked = '1'; }  // 交易锁：灰显（标记防兑换灰显逻辑误清）；兑换模式冷却卡可兑（官方允许）不灰显
   if (userLocked) { card.classList.add('manual-locked'); card.appendChild(buildLockOverlay(it)); }  // 手动锁：磨砂蒙版 + 解锁按钮
-  if (!tradeLocked && !userLocked) {      // 未锁：可选
+  if ((!tradeLocked || redeemMode) && !userLocked) {   // 可选：未锁；兑换模式冷却卡可兑（官方允许）也走可选分支（否则无勾选框/无 onclick，自动选无选中态+手动选不了）；手动锁定始终不可选
     var chk = el('div', { cls: 'batch-check ' + (batchSelected.has(it.cardId) ? 'checked' : '') });
     card.appendChild(chk);
     card.classList.toggle('selected', batchSelected.has(it.cardId));
