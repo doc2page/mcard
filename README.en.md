@@ -105,7 +105,7 @@ Everything lives in `docker-compose.yml`:
 
 Data persists in `./data/mcard.db` — removing the container or rebuilding the image won't lose your API key or cached data.
 
-> **Directory permission**: since v1.3.0 the container runs as non-root (`node`, uid 1000). If the host `./data` directory is not owned by uid 1000 (common on NAS devices like Synology), run once before first start: `sudo chown -R 1000:1000 ./data`
+> **Directory permission**: since v1.2.1 the container runs as non-root (`node`, uid 1000). If the host `./data` directory is not owned by uid 1000 (common on NAS devices like Synology), run once before first start: `sudo chown -R 1000:1000 ./data`
 
 ## Common commands
 

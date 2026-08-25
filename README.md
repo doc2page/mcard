@@ -105,7 +105,7 @@ docker compose up -d --build
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 
-> **目录权限**：v1.3.0 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
+> **目录权限**：v1.2.1 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
 
 ## 常用命令
 
