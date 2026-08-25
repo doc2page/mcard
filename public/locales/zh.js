@@ -685,6 +685,7 @@ registerMessages('zh', {
   'batch.delisted': '已撤未重挂，请手动重挂',
   'batch.colCard': '卡片',
   'batch.colCurrent': '现价',
+  'batch.netListTip': '净卖价 {net} · 挂单价 {list}',
   'batch.colNet': '新价',
   'batch.colStatus': '改动',
   'batch.buy': '批量购买',

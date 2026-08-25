@@ -680,6 +680,7 @@ registerMessages('en', {
   'batch.delisted': 'Delisted but not relisted, please relist manually',
   'batch.colCard': 'Card',
   'batch.colCurrent': 'Current',
+  'batch.netListTip': 'Net {net} · list price {list}',
   'batch.colNet': 'New',
   'batch.colStatus': 'Change',
   'batch.buy': 'Batch buy',

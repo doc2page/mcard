@@ -177,6 +177,14 @@ function renderBadges() {
       b.textContent = viewBadges[k] > 99 ? '99+' : String(viewBadges[k]);
     } else if (b) { b.remove(); btn.classList.remove('has-badge'); }
   });
+  // 移动端汇总红点：抽屉收起时侧栏角标不可见——汉堡按钮右上角红点提示「有变动」（无数字），点开抽屉看各 view 明细
+  const mt = $('menuToggle');
+  if (mt) {
+    var dot = mt.querySelector('.nav-dot');
+    const any = Object.keys(viewBadges).some((k) => viewBadges[k] > 0);
+    if (any && !dot) mt.appendChild(el('span', { cls: 'nav-dot' }));
+    else if (!any && dot) dot.remove();
+  }
 }
 
 // 5s 闪现角标（独立于持久款；同按钮可并存，tmp 类区分）
@@ -4240,12 +4248,31 @@ function buildBatchRow(item) {
   } else if (batchState.op !== 'cancel') {
     var inp = el('input', { cls: 'th-input batch-price', attrs: { type: 'number', min: '0', inputmode: 'numeric', placeholder: t('inv.sellPlaceholder') } });
     inp.disabled = !!batchState.running;  // 用 property 设 disabled（el() 的 setAttribute 对 disabled:false 会误禁用：属性存在即生效）
-    inp.value = item.netPrice || '';
+    // 单框双态：focus=输入态（显示净卖价可编辑）；blur/初始=确认态（显示挂单价 round(净×1.05)，muted 弱化 + tooltip 双价）。
+    // 数据层 item.netPrice 永远存净卖价（提交逻辑零改动），显示层切换；顶部批量设价经 _paintPrice 按聚焦态刷新。
+    function paintConfirm() {
+      var net = Number(item.netPrice) || 0;
+      if (net > 0) {
+        var list = Math.round(net * 1.05);
+        inp.value = list;
+        inp.classList.add('show-list');
+        inp.title = t('batch.netListTip', { net: fmtNum(net), list: fmtNum(list) });
+      } else { inp.value = ''; inp.classList.remove('show-list'); inp.title = ''; }
+    }
+    function paintEdit() {
+      inp.value = item.netPrice || '';
+      inp.classList.remove('show-list');
+      inp.title = '';
+    }
+    item._paintPrice = function () { (document.activeElement === inp) ? paintEdit() : paintConfirm(); };
+    inp.onfocus = paintEdit;
+    inp.onblur = paintConfirm;
     inp.oninput = function () {
       item.netPrice = Number(inp.value) || 0;
       item.steps.forEach(function (s) { if (s.kind === 'sell') s.params.netPrice = item.netPrice; });
     };
     row.appendChild(inp);
+    paintConfirm();  // 初始确认态（已设价显示挂单价；执行中 disabled 定格挂单价）
   }
   var st = el('div', { cls: 'batch-row-status' });
   row.appendChild(st);
@@ -4390,7 +4417,7 @@ function buildBatchPriceBar() {
       if (dimValOf(it) === v) {
         it.netPrice = p;
         it.steps.forEach(function (s) { if (s.kind === 'sell') s.params.netPrice = p; });
-        var inp = it._rowEl && it._rowEl.querySelector('.batch-price'); if (inp) inp.value = p;
+        if (it._paintPrice) it._paintPrice();   // 双态刷新：行未聚焦 → 直接显示挂单价（净价已入 netPrice）
       }
     });
   };
