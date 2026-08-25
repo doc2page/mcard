@@ -14,7 +14,7 @@
 
 ## 功能
 
-- 💳 **持有卡片** —— 查看持有的卡牌，可手动锁定（锁定后不会被交易处理）
+- 💳 **持有卡片** —— 查看持有的卡牌，可手动锁定（锁定后不会被交易处理）；支持普通卡兑换机制符（10 换 1）
 - 📚 **我的卡册** —— 按影片聚合稀有度/称号的收藏册（持有+挂单双格矩阵，一键加入定向搜索）
 - 📊 **市场行情** —— 手动采集市场挂牌、价格、稀有度分布
 - 🛒 **交易** —— 买入 / 卖出 / 撤单（内置安全门与预算池控制）
@@ -22,6 +22,7 @@
 - 📉 **掉落统计** —— 基于 Feed 的增量统计（官方接口仅返回最新 25 条，支持手动导入补全历史）
 - 🎟️ **魔力符券记录** —— 开卡收益 / 分布 / 幸运倍率
 - 🔖 **订单簿** —— 按卡查询在售挂单
+- 🔔 **变化角标** —— 打开页面轻量探测各数据变动，侧栏红字角标提醒（进入页面即清）
 - 📱 **移动端自适应** —— 抽屉式导航、统计卡片可折叠，手机 / 平板 / 桌面通用
 - 🔑 **API Key 经页面设置** —— 存储在后端 SQLite，不落浏览器
 - 🔐 **可选访问鉴权** —— HMAC token 登录保护（cookie 30 天）
@@ -61,7 +62,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.2.2
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.3.0
 ```
 
 或 `docker-compose.yml`：
@@ -69,7 +70,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.2.2
+    image: doc2page/mcard:1.3.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -104,7 +105,7 @@ docker compose up -d --build
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 
-> **目录权限**：v1.2.2 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
+> **目录权限**：v1.3.0 起容器以非 root（`node`，uid 1000）运行。若宿主 `./data` 目录属主不是 uid 1000（如群晖等 NAS 常见），首次启动前执行一次：`sudo chown -R 1000:1000 ./data`
 
 ## 常用命令
 
@@ -142,7 +143,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # 升级（先备份！见上节）
 docker compose down
-docker pull doc2page/mcard:latest        # 或指定版本如 :1.2.2
+docker pull doc2page/mcard:latest        # 或指定版本如 :1.3.0
 docker compose up -d
 
 # 回滚：把 docker-compose.yml 里 image 改回旧版本 tag，再 up -d
