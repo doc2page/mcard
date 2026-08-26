@@ -1,6 +1,7 @@
 // public/dispatch.js — send(msg) 的 fetch 路由映射（纯函数，浏览器 + Node 可测）
 export function dispatch(msg) {
   switch (msg.type) {
+    case 'GET_VERSION':       return { method: 'GET', path: '/api/version' };
     case 'GET_STATE':        return { method: 'GET',  path: '/api/state' };
     case 'GET_ORDERBOOK': {
       const q = new URLSearchParams({ filmId: msg.filmId || '', provenance: msg.provenance || '', rarity: msg.rarity || '' });
@@ -14,6 +15,7 @@ export function dispatch(msg) {
     case 'IMPORT_DROPS':     return { method: 'POST', path: '/api/drop-import', body: { json: msg.json } };
     case 'LOAD_MARKET_DATA': return { method: 'POST', path: '/api/collect', body: { type: 'marketStats' } };
     case 'SEARCH_MARKET':    return { method: 'POST', path: '/api/search', body: { tags: msg.tags, pageSize: msg.pageSize } };
+    case 'RELIST_BUY':         return { method: 'POST', path: '/api/trade', body: { action: 'relistBuy', variant: msg.variant, price: msg.price } };
     case 'BUY_CARD':         return { method: 'POST', path: '/api/trade', body: { action: 'buy', variant: msg.variant, expectPrice: msg.expectPrice, maxPrice: msg.maxPrice, skipRefresh: msg.skipRefresh } };
     case 'SELL_CARD':        return { method: 'POST', path: '/api/trade', body: { action: 'sell', cardId: msg.cardId, isMech: msg.isMech, netPrice: msg.netPrice, skipRefresh: msg.skipRefresh } };
     case 'CANCEL_ORDER':     return { method: 'POST', path: '/api/trade', body: { action: 'cancel', orderId: msg.orderId, skipRefresh: msg.skipRefresh } };

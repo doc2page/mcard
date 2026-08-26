@@ -2275,6 +2275,39 @@ body.no-token .layout > main { display: none !important; }
   pointer-events: none;
   animation: badgePop 0.25s cubic-bezier(0.3, 1.6, 0.4, 1);
 }
-.nav-badge.tmp { animation: badgePop 0.25s cubic-bezier(0.3, 1.6, 0.4, 1), badgeFadeOut 0.4s ease 4.6s forwards; }  /* 5s 闪现款：末段淡出 */
 @keyframes badgePop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes badgeFadeOut { to { transform: scale(0.6); opacity: 0; } }
+
+/* ============ 定向搜索词条模态（v1.3.1：稀有度/称号/每档最大价筛选） ============ */
+.tag-name-input { width: 100%; }
+.tag-rarity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.tag-rarity-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tag-rarity-row .th-input { flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; }
+.tag-rarity-label { flex: 0 0 26px; font-size: 11px; font-weight: 800; }
+.tag-rarity-label.r-UR { color: var(--r-UR); }
+.tag-rarity-label.r-SSR { color: var(--r-SSR); }
+.tag-rarity-label.r-SR { color: var(--r-SR); }
+.tag-rarity-label.r-R { color: var(--r-R); }
+.tag-rarity-label.r-N { color: var(--r-N); }
+.tag-title-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.tag-rm { color: var(--down); margin-right: auto; }  /* 移除词条：红色靠左（与取消/保存分隔） */
+@media (max-width: 768px) {
+  .tag-rarity-grid { grid-template-columns: 1fr; }  /* 移动端单列（行内含价格输入不挤） */
+}
+.tag-modal .th-group-title { margin-top: 14px; }                    /* 词条模态：分区标题与上方内容拉开（全局 th-group-title 无 margin-top） */
+.tag-modal .modal-body > .th-group-title:first-child { margin-top: 0; }  /* 首个（片名）不重复顶距 */
+
+/* ============ 定向搜索词条胶囊：随机预置色背景（名字 hash 稳定取色，tint 彩底 + 同色描边，深浅主题各配一套） ============ */
+.search-tag.tag-c1 { --tag-c: #f5a623; } .search-tag.tag-c2 { --tag-c: #ff9459; } .search-tag.tag-c3 { --tag-c: #4cc38a; } .search-tag.tag-c4 { --tag-c: #5aa9f5; }
+.search-tag.tag-c5 { --tag-c: #b58af5; } .search-tag.tag-c6 { --tag-c: #45d4d0; } .search-tag.tag-c7 { --tag-c: #f56ab0; } .search-tag.tag-c8 { --tag-c: #98a4b8; }
+[data-theme="light"] .search-tag.tag-c1 { --tag-c: #b06a00; } [data-theme="light"] .search-tag.tag-c2 { --tag-c: #d65a1f; }
+[data-theme="light"] .search-tag.tag-c3 { --tag-c: #1f8a5c; } [data-theme="light"] .search-tag.tag-c4 { --tag-c: #2d6fc4; }
+[data-theme="light"] .search-tag.tag-c5 { --tag-c: #7a4fd0; } [data-theme="light"] .search-tag.tag-c6 { --tag-c: #178f8c; }
+[data-theme="light"] .search-tag.tag-c7 { --tag-c: #c23f82; } [data-theme="light"] .search-tag.tag-c8 { --tag-c: #5f6b80; }
+.search-tag[class*="tag-c"] {
+  background: var(--tag-c);   /* 实色彩底白字（与原 accent 实底同质感，仅色相随机）；浅主题色板为加深版，白字对比充足 */
+  color: #fff;
+}
+.st-sub { color: rgba(255, 255, 255, 0.82); }  /* 筛选徽标稀有度文字：白色、比片名（全白）淡一档 */
+.seg-btn.mini.order-side-btn.side-on { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 700; }  /* 挂买/挂卖筛选激活态 */
+.version-box { display: flex; flex-direction: column; gap: 1px; }
+.version-box .vb-newer { color: var(--accent); font-weight: 700; }  /* 有新版本高亮 */

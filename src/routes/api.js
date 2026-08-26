@@ -1,7 +1,7 @@
 // src/routes/api.js
 import { Router } from 'express';
 
-export function createApiRouter({ state, collector, trader, mteam }) {
+export function createApiRouter({ state, collector, trader, mteam, version }) {
   const router = Router();
 
   router.get('/api/state', (_req, res) => {
@@ -54,6 +54,7 @@ export function createApiRouter({ state, collector, trader, mteam }) {
       if (action === 'buy') return res.json(await trader.buyCard(req.body));
       if (action === 'sell') return res.json(await trader.sellCard(req.body));
       if (action === 'cancel') return res.json(await trader.cancelOrder(req.body));
+      if (action === 'relistBuy') return res.json(await trader.relistBuy(req.body));
       res.json({ ok: false, reason: 'unknown_action' });
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });
@@ -68,6 +69,10 @@ export function createApiRouter({ state, collector, trader, mteam }) {
     try {
       res.json(await collector.probeTotals(req.body || {}));
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
+
+  router.get('/api/version', (req, res) => {   // 当前运行版本（侧栏版本行用）
+    res.json({ version: version || '' });
   });
 
   router.get('/api/orderbook', async (req, res) => {

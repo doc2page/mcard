@@ -103,7 +103,7 @@ let invSortDir = 'desc';     // 持有卡片排序
 let tradesSortDir = 'desc';  // 交易记录排序
 let apiKeyInvalidShown = false;  // 令牌失效弹窗会话级去重（避免每次 state 更新都弹；用户保存新 key 后重置）
 let tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null }; // 交易记录搜索条件（前端临时；exact=精确等于，否则模糊包含；side=buy/sell 筛选）
-let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set() }; // 挂单搜索条件（前端临时）
+let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null }; // 挂单搜索条件（前端临时；side=null|'buy'|'sell' 挂买/挂卖互斥单选筛选）
 let inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/交易锁多选；showLocked=显示手动锁定的卡，默认隐藏）
 
 function send(msg) {
@@ -187,27 +187,12 @@ function renderBadges() {
   }
 }
 
-// 5s 闪现角标（独立于持久款；同按钮可并存，tmp 类区分）
-function flashBadge(viewKey, n) {
-  const btn = $(BADGE_BTN[viewKey]);
-  if (!btn || n <= 0) return;
-  var old = btn.querySelector('.nav-badge.tmp');
-  if (old) old.remove();
-  const b = el('span', { cls: 'nav-badge tmp' });
-  b.textContent = n > 99 ? '99+' : String(n);
-  btn.appendChild(b);
-  setTimeout(() => { if (b && b.parentNode) b.remove(); }, 5000);
-}
-
-// 统一变化入口：正看该 view → 闪 5s（因持久角标刚进入的首次变化除外，见 _flashSuppressed）；否则累积持久角标
-var _flashSuppressed = null;   // { view }：带持久角标进入 view 时置位，进入后的首次该 view 变化不闪（一次性），停留期间后续变化恢复提醒
+// 变化入口（v1.3.1 简化：只服务打开页面探测层，累积持久角标）——
+// 曾有 applyPatch 实时 diff + 5s 闪现层，因「进 view 后采集冷却 skip 数据未同步，重开页面探测仍出差值」造成重复提示烦扰，已撤
 function notifyViewDelta(viewKey, delta) {
   if (!(viewKey in viewBadges) || !delta) return;
-  if (view === viewKey) {
-    if (_flashSuppressed && _flashSuppressed.view === viewKey) { _flashSuppressed = null; return; }
-    flashBadge(viewKey, Math.abs(delta));
-  }
-  else { viewBadges[viewKey] += Math.abs(delta); renderBadges(); }
+  viewBadges[viewKey] += Math.abs(delta);
+  renderBadges();
 }
 
 // 打开页面轻量探测：PROBE（后端 5 小请求只拿 total，不写 state，60s 冷却）→ 与本地对比 → 持久角标
@@ -231,13 +216,10 @@ function probeAndBadge() {
 
 function applyPatch(patch) {
   if (!state) state = {};
-  const before = badgeSnapshot();   // patch 前基准 → apply 后 diff（点按钮刷新/SSE 推送的变化统一在此感知）
   for (const k of Object.keys(patch || {})) {
     if (k === 'config') state.config = mergeObj(state.config || {}, patch.config || {});
     else state[k] = patch[k];
   }
-  const after = badgeSnapshot();
-  Object.keys(after).forEach((k) => { if (after[k] !== before[k]) notifyViewDelta(k, after[k] - before[k]); });
 }
 
 // SSE：后端 state 变更推送。增量合并 patch → renderAll/renderLive（采集落盘即触发，不再拉全量 /api/state）。
@@ -268,9 +250,51 @@ function renderAll() {
   applyLabUrl();
 }
 
+// ---------- 侧栏版本行：当前版本 + 最新版本（GitHub releases 实时读，失败直说不强求） ----------
+var _latestVersion = null;   // null=未查/查询中；false=失败；string=最新 tag（v 前缀已去）
+var _curVersion = '';        // 当前运行版本缓存（切语言重渲染用——renderStatus 无异步拿不到）
+function renderVersionBox() {
+  const box = $('versionBox');
+  if (!box) return;
+  const cur = _curVersion;
+  box.replaceChildren();
+  const l1 = el('div', { text: t('panel.curVersion') + ' ' + (cur || '—') });
+  var lt;
+  if (_latestVersion === null) lt = t('panel.versionChecking');
+  else if (_latestVersion === false) lt = t('panel.versionFail');
+  else {
+    lt = _latestVersion;
+    if (cur && _latestVersion !== cur) lt += ' · ' + t('panel.versionNewer');   // 有新版高亮提示
+  }
+  const l2 = el('div', { cls: (typeof _latestVersion === 'string' && cur && _latestVersion !== cur) ? 'vb-newer' : '', text: t('panel.latestVersion') + ' ' + lt });
+  // 最新版本行：点击新 tab 打开 GitHub releases（查到/失败均可点——失败时让用户自己去看也合理）
+  l2.title = 'GitHub Releases';
+  l2.style.cursor = 'pointer';
+  l2.onclick = () => window.open('https://github.com/doc2page/mcard/releases/latest', '_blank');
+  append(box, l1, l2);
+}
+function initVersionBox() {
+  send({ type: 'GET_VERSION' }).then((r) => {
+    _curVersion = (r && r.version) || '';
+    renderVersionBox();
+  }).catch(() => renderVersionBox());
+  // GitHub releases 最新版（公开 API，CORS 允许）；8s 超时兜底，失败直说（不强求）
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 8000);
+  fetch('https://api.github.com/repos/doc2page/mcard/releases/latest', { signal: ctrl.signal })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      _latestVersion = (j && j.tag_name) ? String(j.tag_name).replace(/^v/, '') : false;
+      return send({ type: 'GET_VERSION' });
+    })
+    .then((r) => { _curVersion = (r && r.version) || _curVersion; renderVersionBox(); })
+    .catch(() => { _latestVersion = false; renderVersionBox(); });
+}
+
 // ---------- 状态区 ----------
 function renderStatus() {
   if (!state) return;
+  renderVersionBox();   // 版本行随状态/语言刷新（版本值走缓存 _curVersion/_latestVersion，无异步）
   $('buyCount').textContent = (state.buyHistory && state.buyHistory.length) || 0;
   const oc = $('ordersCount'); if (oc) oc.textContent = ((state.ordersAll || []).filter((o) => o.status === 'open')).length;
   const _invAll = ((state.inventory || []).concat((state.mechInventory || []).filter((m) => !m.isUsed)));
@@ -581,17 +605,21 @@ function buildCardBookCard(f, delay) {
   } else fb.style.display = 'grid';
   pw.appendChild(fb);
   // 卡片右上角：加入定向搜索（复用市场定向 tag：addSearchTag 去重+持久化+自动查询；不跳转 view）
-  const sb = el('button', { cls: 'cb-search-btn', attrs: { type: 'button', title: t('cardBook.addSearch'), 'aria-label': t('cardBook.addSearch') } });
+  // 已设该影片词条 → 图标换编辑铅笔（点击进模态自动转编辑该词条）；未设 → 放大镜新增
+  const hasTag = (((state.config && state.config.searchTags) || []).some((x) => tagOf(x) === name));
+  const sb = el('button', { cls: 'cb-search-btn', attrs: { type: 'button', title: t(hasTag ? 'search.tagEdit' : 'cardBook.addSearch'), 'aria-label': t(hasTag ? 'search.tagEdit' : 'cardBook.addSearch') } });
   const sbSvg = svgEl('svg', { attrs: { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' } });
-  sbSvg.appendChild(svgEl('circle', { attrs: { cx: 7, cy: 7, r: 4.6, stroke: 'currentColor', 'stroke-width': 1.6 } }));
-  sbSvg.appendChild(svgEl('path', { attrs: { d: 'M10.4 10.4L13.8 13.8', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' } }));
+  if (hasTag) {
+    sbSvg.appendChild(svgEl('path', { attrs: { d: 'M11.2 2.8l2 2L6 12l-2.6.6.6-2.6z', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linejoin': 'round' } }));
+  } else {
+    sbSvg.appendChild(svgEl('circle', { attrs: { cx: 7, cy: 7, r: 4.6, stroke: 'currentColor', 'stroke-width': 1.6 } }));
+    sbSvg.appendChild(svgEl('path', { attrs: { d: 'M10.4 10.4L13.8 13.8', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' } }));
+  }
   sb.appendChild(sbSvg);
   sb.onclick = (e) => {
     e.stopPropagation();
-    const cur = (state.config && state.config.searchTags) || [];
-    if (cur.indexOf(name) !== -1) { showToast(t('cardBook.dupeSearch'), 'info'); return; }
-    addSearchTag(name);
-    showToast(t('cardBook.addedSearch', { name: name }), 'success');
+    // 快捷入口弹词条模态：片名锁定、稀有度默认勾该影片未拥有的档（补缺导向）、称号默认全要
+    openSearchTagModal({ preset: { name: name, lockName: true, rarities: RARITIES.filter((r) => !f.rarities[r]) } });
   };
   // 右：片名（顶与 poster 齐）+ 5 行稀有度（均匀分布到 poster 底）；每行 = 双框稀有度徽章 + 5 称号×双格矩阵
   const right = el('div', { cls: 'cb-right' });
@@ -636,7 +664,7 @@ function renderCardBook() {
   const arr = computeCardBook();
   // 数据签名：结构未变不重建（SSE 高频 patch 曾致 DOM/img 全量反复重建 → 解码内存峰值叠高、页面卡）。
   // sig 拼入当前语言：setLang→renderAll 时语言变化要穿透签名重建（图例等 t() 固化文案才能实时切换）
-  const sig = getI18nLang() + '::' + arr.map((f) => f.filmId + ':' + RARITIES.filter((r) => f.rarities[r]).map((r) => r + Object.keys(f.rarities[r]).filter((tk) => tk).map((tk) => tk + f.rarities[r][tk].hold + '/' + f.rarities[r][tk].listed).join(',')).join(';')).join('|');
+  const sig = getI18nLang() + '::' + arr.map((f) => f.filmId + ':' + RARITIES.filter((r) => f.rarities[r]).map((r) => r + Object.keys(f.rarities[r]).filter((tk) => tk).map((tk) => tk + f.rarities[r][tk].hold + '/' + f.rarities[r][tk].listed).join(',')).join(';')).join('|') + '::tags=' + (((state.config && state.config.searchTags) || []).map(tagOf).join(','));  // 词条名单入 sig：加/删词条重绘（放大镜↔铅笔图标同步）
   if (box._sig === sig) return;
   box._sig = sig;
   _cbRenderToken++;
@@ -690,10 +718,7 @@ function triggerMarketRefresh(force) {
 function toggleView(v) {
   view = v;
   if (v !== 'inventory') redeemMode = null;   // 切出持有 view：退出兑换子模式
-  if (viewBadges[v] !== undefined && viewBadges[v] > 0) {
-    viewBadges[v] = 0; renderBadges();          // 进 view 清零持久角标（已看=已知悉）
-    _flashSuppressed = { view: v };             // 因角标而进：本次进入后的首次采集变化不闪 5s 角标（用户刚看过角标，再闪一次是打扰）
-  } else if (_flashSuppressed && _flashSuppressed.view !== v) _flashSuppressed = null;  // 无角标进入其它 view：清除抑制
+  if (viewBadges[v] !== undefined && viewBadges[v] > 0) { viewBadges[v] = 0; renderBadges(); }  // 进 view 清零持久角标（已看=已知悉）
   document.body.dataset.view = v;  // 供 CSS 按视图区分（如移动端隐藏卡片价格单位）
   if (batchInView && batchInView !== v) clearBatchSelection(false);  // 切 view 清批量选择（renderLive 会重绘新 view）
   // 切视图失效签名缓存：market/trades/orders/inventory 复用同一 grid，非市场视图清子节点但不清 _sig；
@@ -1176,6 +1201,9 @@ function renderOrdersStats() {
   if (!box) return;
   const all = (state && state.ordersAll) || [];
   const total = (state && state.ordersTotal) || all.length;
+  const sb0 = $('orderSideBuyBtn'), ss0 = $('orderSideSellBtn');
+  if (sb0) sb0.classList.toggle('side-on', ordersFilter.side === 'buy');
+  if (ss0) ss0.classList.toggle('side-on', ordersFilter.side === 'sell');
   const open = all.filter((o) => o.status === 'open');
   const filled = all.filter((o) => o.status === 'filled').length;
   const cancelled = all.filter((o) => o.status === 'cancelled').length;
@@ -1528,8 +1556,9 @@ function filterOrders(list) {
   const hasDate = !!(f.dateFrom || f.dateTo);
   const hasRarity = f.mech || (f.rarities && f.rarities.size > 0);
   const hasTitle = f.titles && f.titles.size > 0;
-  if (!kws.length && !hasDate && !hasRarity && !hasTitle) return list;
+  if (!kws.length && !hasDate && !hasRarity && !hasTitle && !f.side) return list;
   return list.filter((it) => {
+    if (f.side && it.side !== f.side) return false;   // 挂买/挂卖互斥单选
     if (hasRarity) {
       const m = isMechCard(it);
       if (m) { if (!f.mech) return false; }
@@ -4499,7 +4528,23 @@ function buildSellBtn(it) {
 }
 
 // 卖出净卖价输入弹窗：手输净卖价 + 含税提示；返回有效净价或 null（取消/无效）
-async function promptSellPrice(it) {
+// 挂买改价输入：直接买价（买入即支付价，无手续费明细；限价=此价，市场有更低价则直接成交）
+async function promptBuyPrice(it, onConfirm) {
+  const input = el('input', { cls: 'modal-input', attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: t('order.buyPricePh') } });
+  input.value = String(Number(it.price) || '');
+  const body = el('div');
+  append(body,
+    el('div', { cls: 'modal-note', text: t('order.buyModifyNote') }),
+    input
+  );
+  const ok = await confirmDialog({ hero: buildModalHero(it), body: body, confirmText: t('order.relistBuy'), cancelText: t('common.cancel'), confirmVariant: 'buy',
+    onConfirm: onConfirm ? () => onConfirm(Number(input.value) || 0) : null });   // 确认时即时读价；无效价由回调侧校验
+  if (ok || onConfirm) return null;
+  const v = Number(input.value) || 0;
+  return v > 0 ? v : null;
+}
+
+async function promptSellPrice(it, onConfirm) {
   const input = el('input', { cls: 'modal-input', attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: t('inv.sellPlaceholder') } });
   // 价格明细：net / 抽水5% / 挂单价（实时算：挂单价 = net × 1.05，抽水 = net × 0.05）
   const netCell = el('span', { cls: 'sd-val' });
@@ -4528,8 +4573,9 @@ async function promptSellPrice(it) {
     input,
     breakdown
   );
-  const ok = await confirmDialog({ hero: buildModalHero(it), body: body, confirmText: t('common.sell'), cancelText: t('common.cancel'), confirmVariant: 'sell' });
-  if (!ok) return null;
+  const ok = await confirmDialog({ hero: buildModalHero(it), body: body, confirmText: t('common.sell'), cancelText: t('common.cancel'), confirmVariant: 'sell',
+    onConfirm: onConfirm ? () => onConfirm(Number(input.value) || 0) : null });
+  if (ok || onConfirm) return null;
   const netPrice = Number(input.value);
   if (!Number.isFinite(netPrice) || netPrice <= 0) { showToast(t('inv.sellInvalidPrice'), 'error'); return null; }
   return netPrice;
@@ -4743,68 +4789,148 @@ let searching = false;      // 串行查询中(loading)
 let _searchSeq = 0;         // 防并发：只采纳最新一次查询的结果
 function hasSearchTags() { return ((state.config && state.config.searchTags) || []).length > 0; }
 
+// ============ 定向搜索词条（v1.3.1：词条支持稀有度/称号/每档最大价筛选） ============
+// 词条结构 { name, rarities[], titles[], maxPrices{UR:n,...} }；旧纯字符串词条兼容 = 无筛选。
+// 勾选稀有度/称号 = 只要勾选项（无称号卡在勾称号时排除，同市场筛选语义）；都不勾 = 全要；每档最大价空 = 不限。
+function tagOf(tg) { return (tg && typeof tg === 'object') ? tg.name : tg; }
+
 function renderSearchTags() {
   const mf = $('marketFilter');
   if (mf) mf.classList.toggle('has-tags', hasSearchTags());  // 有 tag → 隐藏稀有度/机制卡/称号/价格阈值筛选行
   const box = $('searchTagBox');
   if (!box) return;
-  if (box.querySelector('.search-tag-input')) return;  // 输入中不打断
   const tags = ((state.config && state.config.searchTags) || []);
   box.replaceChildren();
-  for (const tag of tags) {
-    const chip = el('div', { cls: 'search-tag' });
-    chip.appendChild(el('span', { text: tag }));
-    const close = el('span', { cls: 'st-close', text: '×', attrs: { title: t('search.removeTag') } });
-    close.onclick = () => removeSearchTag(tag);
-    chip.appendChild(close);
+  tags.forEach((tag, i) => {
+    const obj = (tag && typeof tag === 'object') ? tag : null;
+    const name = obj ? obj.name : tag;
+    var hash = 0; for (var ci = 0; ci < name.length; ci++) hash = (hash * 31 + name.charCodeAt(ci)) >>> 0;
+    const chip = el('div', { cls: 'search-tag tag-c' + (hash % 8 + 1) });   // 名字 hash → 预置色板（稳定，同词条恒同色）
+    const parts = [];
+    if (obj) {
+      if ((obj.rarities || []).length) parts.push((obj.rarities || []).join('/'));
+      const ps = obj.maxPrices || {};
+      const priced = Object.keys(ps).filter((r) => Number(ps[r]) > 0);
+      if (priced.length) parts.push(priced.map((r) => r + ' ≤' + fmtNum(ps[r])).join(' / '));
+      if ((obj.titles || []).length) parts.push((obj.titles || []).join('/'));
+    }
+    if (parts.length) {
+      append(chip, el('span', { text: name }), el('span', { cls: 'st-sub', text: ' · ' + parts[0] }));
+      chip.title = name + '\n' + parts.join('\n');  // 完整条件 tooltip
+    } else chip.appendChild(el('span', { text: name }));
+    const edit = el('span', { cls: 'st-close', text: '✎', attrs: { title: t('search.tagEdit') } });
+    edit.onclick = () => openSearchTagModal({ index: i });
+    chip.appendChild(edit);
     box.appendChild(chip);
-  }
+  });
   const add = el('button', { cls: 'search-tag-add', attrs: { type: 'button', title: t('search.addTag') }, text: '+' });
-  add.onclick = showSearchTagInput;
+  add.onclick = () => openSearchTagModal();
   box.appendChild(add);
 }
 
-function showSearchTagInput() {
-  const box = $('searchTagBox');
-  if (!box) return;
-  const add = box.querySelector('.search-tag-add');
-  if (!add) return;
-  const wrap = el('div', { cls: 'search-tag-input-wrap' });
-  const input = el('input', { cls: 'search-tag-input', attrs: { type: 'text', placeholder: t('search.tagPh') } });
-  const save = el('button', { cls: 'search-tag-save', attrs: { type: 'button', title: t('search.addTag') }, text: '✓' });
-  wrap.appendChild(input);
-  wrap.appendChild(save);
-  add.replaceWith(wrap);
-  input.focus();
+// 词条新增/编辑模态：片名 + 稀有度（勾选 + 每档最大价）+ 称号（多选）。
+// opts.index = 编辑已有词条；opts.preset = { name, lockName, rarities }（卡册快捷入口：片名锁定、稀有度默认该影片未拥有档）。
+function openSearchTagModal(opts) {
+  opts = opts || {};
+  const tags = ((state.config && state.config.searchTags) || []).slice();
+  // 编辑定位：显式 index；或卡册 preset 的片名已存在词条 → 自动转编辑该词条（否则当新增会撞重名被拒）
+  const idx = (typeof opts.index === 'number') ? opts.index
+    : ((opts.preset && opts.preset.name) ? tags.findIndex((x) => tagOf(x) === opts.preset.name) : -1);
+  const editing = idx !== -1 ? idx : null;
+  const srcTag = editing != null ? tags[editing] : (opts.preset || {});
+  const cur = (srcTag && typeof srcTag === 'object') ? srcTag : { name: String(srcTag || '') };
+  const restoreFocus = modalFocusRestore();
+  const mask = el('div', { cls: 'modal-mask' });
+  const box = el('div', { cls: 'modal tag-modal' });
+  const head = el('div', { cls: 'modal-head' });
+  append(head, el('div', { cls: 'modal-icon', text: '🎯' }), el('div', { cls: 'modal-title', text: t(editing != null ? 'search.tagEdit' : 'search.tagAdd') }));
+  const body = el('div', { cls: 'modal-body' });
+  body.appendChild(el('div', { cls: 'th-group-title', text: t('search.tagFilm') }));
+  const nameInput = el('input', { cls: 'th-input tag-name-input', attrs: { type: 'text', placeholder: t('search.tagPh') } });
+  nameInput.value = cur.name || '';
+  if (opts.preset && opts.preset.lockName) nameInput.disabled = true;   // 卡册入口：片名锁定只读
+  body.appendChild(nameInput);
+  body.appendChild(el('div', { cls: 'th-group-title', text: t('search.tagRarity') }));
+  const rRows = {};
+  const rGrid = el('div', { cls: 'tag-rarity-grid' });
+  RARITIES.forEach((r) => {
+    const row = el('label', { cls: 'tag-rarity-row' });
+    const cb = el('input', { attrs: { type: 'checkbox' } });
+    cb.checked = ((cur.rarities || []).indexOf(r) !== -1);
+    const price = el('input', { cls: 'th-input', attrs: { type: 'number', min: '0', inputmode: 'numeric', placeholder: t('search.tagMaxPricePh') } });
+    const mp = Number((cur.maxPrices || {})[r]) || 0;
+    if (mp > 0) price.value = String(mp);
+    price.disabled = !cb.checked;
+    cb.onchange = () => { price.disabled = !cb.checked; if (!cb.checked) price.value = ''; };
+    append(row, cb, el('span', { cls: 'tag-rarity-label r-' + r, text: r }), price);
+    rGrid.appendChild(row);
+    rRows[r] = { cb: cb, price: price };
+  });
+  body.appendChild(rGrid);
+  body.appendChild(el('div', { cls: 'th-group-title', text: t('search.tagTitle') }));
+  const tChips = {};
+  const tBox = el('div', { cls: 'tag-title-row' });
+  Object.keys(TITLE_TIER).forEach((tk) => {
+    const chip = el('button', { cls: 'chip inv-title ' + (TITLE_TIER[tk] || 'tt-5') + (((cur.titles || []).indexOf(tk) !== -1) ? ' on' : ''), attrs: { type: 'button' } });
+    chip.appendChild(el('span', { cls: 'dot' }));
+    chip.appendChild(document.createTextNode(tk));
+    chip.onclick = () => chip.classList.toggle('on');
+    tBox.appendChild(chip);
+    tChips[tk] = chip;
+  });
+  body.appendChild(tBox);
+  body.appendChild(el('div', { cls: 'panel-hint', text: t('search.tagHint') }));
+  const actions = el('div', { cls: 'modal-actions' });
+  const cancelBtn = el('button', { cls: 'btn ghost', text: t('common.cancel') });
+  const okBtn = el('button', { cls: 'btn primary', text: t('common.save') });
+  if (editing != null) {
+    const rmBtn = el('button', { cls: 'btn ghost tag-rm', text: t('search.tagRemove') });
+    rmBtn.onclick = () => { close(); removeSearchTagAt(editing); };
+    append(actions, cancelBtn, rmBtn, okBtn);
+  } else append(actions, cancelBtn, okBtn);
+  append(box, head, body, actions);
+  mask.appendChild(box);
+  document.body.appendChild(mask);
+  requestAnimationFrame(() => mask.classList.add('show'));
+  setTimeout(() => { try { if (!nameInput.disabled) nameInput.focus(); else okBtn.focus(); } catch (e) {} }, 60);
   let done = false;
-  const finish = (doSave) => {
+  function close() {
     if (done) return; done = true;
-    const v = doSave ? String(input.value || '').trim() : '';
-    wrap.remove();  // 先移除输入区，放行 renderSearchTags 的「输入中」guard（否则它误判跳过重建 → tag 不更新）
-    if (v) addSearchTag(v);  // async：后台持久化 + 触发查询；新 tag 由 addSearchTag 完成后补渲染
-    renderSearchTags();       // 重建 tag 横排 + + 按钮
+    document.removeEventListener('keydown', onKey);
+    mask.classList.remove('show');
+    setTimeout(() => { mask.remove(); restoreFocus(); }, 220);
+  }
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+  cancelBtn.onclick = close;
+  okBtn.onclick = async () => {
+    const name = String(nameInput.value || '').trim();
+    if (!name) { showToast(t('search.tagNeedName'), 'error'); return; }
+    const rarities = RARITIES.filter((r) => rRows[r].cb.checked);
+    const maxPrices = {};
+    RARITIES.forEach((r) => { const v = Number(rRows[r].price.value) || 0; if (rRows[r].cb.checked && v > 0) maxPrices[r] = v; });
+    const titles = Object.keys(tChips).filter((tk) => tChips[tk].classList.contains('on'));
+    close();
+    await saveSearchTag({ name: name, rarities: rarities, titles: titles, maxPrices: maxPrices }, editing);
   };
-  input.onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-    else if (e.key === 'Escape') { finish(false); }
-  };
-  save.onmousedown = (e) => e.preventDefault();  // 阻止 input 失焦，让 onclick 生效
-  save.onclick = () => finish(true);
-  input.onblur = () => finish(false);  // 点别处=取消（不保存半截）
 }
 
-async function addSearchTag(tag) {
+// 保存词条（index=null 新增；重名按 name 去重，排除自身）
+async function saveSearchTag(tagObj, index) {
   const cur = ((state.config && state.config.searchTags) || []).slice();
-  if (cur.indexOf(tag) !== -1) return;  // 不允许重复
-  cur.push(tag);
-  if (state.config) state.config.searchTags = cur;  // 乐观更新（立即隐藏筛选行 + 显示新 tag，避免 await 往返期间闪烁）
+  if (cur.some((x, i) => tagOf(x) === tagObj.name && i !== index)) { showToast(t('search.tagDup'), 'error'); return; }
+  if (typeof index === 'number') cur[index] = tagObj;
+  else cur.push(tagObj);
+  if (state.config) state.config.searchTags = cur;  // 乐观更新
   renderSearchTags();
   await send({ type: 'SET_CONFIG', config: { searchTags: cur } });
   await runSearch();
 }
 
-async function removeSearchTag(tag) {
-  const cur = ((state.config && state.config.searchTags) || []).slice().filter((x) => x !== tag);
+async function removeSearchTagAt(index) {
+  const cur = ((state.config && state.config.searchTags) || []).slice();
+  cur.splice(index, 1);
   if (state.config) state.config.searchTags = cur;  // 乐观更新
   renderSearchTags();
   await send({ type: 'SET_CONFIG', config: { searchTags: cur } });
@@ -4815,26 +4941,52 @@ async function removeSearchTag(tag) {
 // 发起定向搜索：串行查所有 tag → 合并去重 → 一次渲染。pageSize 用页面选的 listPageSize。
 async function runSearch() {
   const tags = ((state.config && state.config.searchTags) || []);
-  if (!tags.length) { searchResults = null; searching = false; renderCards(); return; }
+  if (!tags.length) { searchResults = null; searching = false; if (view === 'market') renderCards(); return; }
   var _now = Date.now();                                   // 2s 节流：seq 只丢弃旧结果不挡连发——连点/回车连击每次都打 M-TEAM search（反风控）
   if (runSearch._lastAt && _now - runSearch._lastAt < 2000) return;
   runSearch._lastAt = _now;
   if (!hasApiKey(state)) return;
   const seq = ++_searchSeq;
   searching = true;
-  renderCards();  // 立即显示 loading
-  let items = [];
-  try {
-    const resp = await send({ type: 'SEARCH_MARKET', tags, pageSize: (state.config && state.config.listPageSize) || 10 });
-    if (seq !== _searchSeq) return;  // 被更新的查询取代，丢弃旧结果
-    items = (resp && resp.items) || [];
-  } catch (e) {
-    if (seq !== _searchSeq) return;
-    items = [];
+  if (view === 'market') renderCards();  // 立即显示 loading（他 view 不动——切回 market 时 renderLive 会渲染）
+  // 逐词条查询（后端按 keyword 搜不变）→ 前端套用各词条筛选（稀有度/称号/每档最大价）→ 合并去重
+  const ps = (state.config && state.config.listPageSize) || 10;
+  let all = [];
+  const seen = new Set();
+  for (const tag of tags) {
+    const name = tagOf(tag);
+    if (!name) continue;
+    let its = [];
+    try {
+      const resp = await send({ type: 'SEARCH_MARKET', tags: [name], pageSize: ps });
+      if (seq !== _searchSeq) return;  // 被更新的查询取代，丢弃旧结果
+      its = (resp && resp.items) || [];
+    } catch (e) {
+      if (seq !== _searchSeq) return;
+      its = [];
+    }
+    if (tag && typeof tag === 'object') {
+      const R = tag.rarities || [], T = tag.titles || [], P = tag.maxPrices || {};
+      its = its.filter((it) => {
+        const v = it.variant || {};
+        const r = v.rarity || it.rarity || '';
+        if (R.length && R.indexOf(r) === -1) return false;
+        if (T.length && T.indexOf(it.title || '') === -1) return false;   // 勾称号 = 无称号卡排除（同市场筛选语义）
+        const mp = Number(P[r]) || 0;
+        if (mp > 0 && Number(it.lowestAsk) > mp) return false;             // 每档最大价
+        return true;
+      });
+    }
+    for (const it of its) {
+      const v = it.variant || {};
+      const key = [v.filmId || it.filmId || '', v.rarity || it.rarity || '', v.provenance || it.provenance || ''].join('|');
+      if (!seen.has(key)) { seen.add(key); all.push(it); }
+    }
   }
-  searchResults = items;
+  if (seq !== _searchSeq) return;
+  searchResults = all;
   searching = false;
-  renderCards();
+  if (view === 'market') renderCards();  // 竞态守卫：搜索慢返回时用户已切到其它 view（如挂单），市场结果不得写进别人的 grid；切回 market 由 renderLive 渲染
 }
 function buildInventoryChips() { buildFilterChips('inventoryRarityBox', inventoryFilter, renderInventory, true, true); }
 function buildTradesChips() { buildFilterChips('tradeRarityBox', tradesFilter, renderTrades, false); }
@@ -5014,7 +5166,24 @@ function confirmDialog(opts) {
     const onKey = (e) => { if (e.key === 'Escape') close(false); };
     document.addEventListener('keydown', onKey);
     cancelBtn.onclick = () => close(false);
-    confirmBtn.onclick = () => close(true);
+    // onConfirm 模式（网络提交型确认，如挂单改价）：确认后按钮 loading 禁用 → await 回调 → 才关模态；
+    // busy 期间 Esc/取消/遮罩关闭全拦（close 检查），防提交中误关丢反馈
+    let _busy = false;
+    const _origClose = close;
+    close = function (result) { if (_busy) return; _origClose(result); };
+    confirmBtn.onclick = async () => {
+      if (!opts.onConfirm) { close(true); return; }
+      if (_busy) return;
+      _busy = true;
+      confirmBtn.disabled = true;
+      const origText = confirmBtn.textContent;
+      confirmBtn.textContent = '…';
+      try { await opts.onConfirm(); } catch (e) { /* 回调自行处理结果 */ }
+      confirmBtn.textContent = origText;
+      confirmBtn.disabled = false;
+      _busy = false;
+      _origClose(true);
+    };
     mask.addEventListener('click', (e) => { if (e.target === mask) close(false); });
   });
 }
@@ -5081,13 +5250,27 @@ async function onOrderModify(it) {
     const r = await send({ type: 'CANCEL_ORDER', orderId: it.id });
     showToast(r && r.ok ? t('order.cancelSuccess') : t('order.cancelFailed'), r && r.ok ? 'success' : 'error');
   } else if (choice === '2') {
-    const netPrice = await promptSellPrice(it);
-    if (netPrice == null) return;
-    const cr = await send({ type: 'CANCEL_ORDER', orderId: it.id });
-    if (!cr || !cr.ok) { showToast(t('order.cancelFailed'), 'error'); return; }
-    const sr = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: netPrice });
-    if (sr && sr.ok) { await send({ type: 'LOAD_ORDERS' }); showToast(t('order.modifySuccess'), 'success'); }
-    else showToast(t('order.modifyFailed'), 'error');
+    // 改价按挂单方向分流：sell=撤+挂卖（净卖价）；buy=撤+纯限价挂买（RELIST_BUY，open 即挂上不撤）。
+    // 网络操作经 prompt 的 onConfirm 回调执行——确认按钮 loading 禁用至完成（confirmDialog onConfirm 模式）
+    const isBuyOrder = it.side === 'buy';
+    const runModify = async (newPrice) => {
+      if (!(newPrice > 0)) { showToast(t('order.modifyFailed'), 'error'); return; }
+      const cr = await send({ type: 'CANCEL_ORDER', orderId: it.id });
+      if (!cr || !cr.ok) { showToast(t('order.cancelFailed'), 'error'); return; }
+      if (isBuyOrder) {
+        const br = await send({ type: 'RELIST_BUY', variant: { filmId: it.filmId, rarity: it.rarity || '', provenance: it.provenance }, price: newPrice });
+        if (br && br.ok) {
+          await send({ type: 'LOAD_ORDERS' });
+          showToast(br.filled ? t('order.relistBuyFilled') : t('order.relistBuyOk'), 'success');
+        } else showToast(t('order.buyModifyFailed'), 'error');
+      } else {
+        const sr = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: newPrice });
+        if (sr && sr.ok) { await send({ type: 'LOAD_ORDERS' }); showToast(t('order.modifySuccess'), 'success'); }
+        else showToast(t('order.modifyFailed'), 'error');
+      }
+    };
+    if (isBuyOrder) await promptBuyPrice(it, runModify);
+    else await promptSellPrice(it, runModify);
   }
   } finally { onOrderModify._busy = false; }
 }
@@ -5824,6 +6007,7 @@ function applyLabUrl() {
   var _langBtn = document.getElementById('langBtn');
   if (_langBtn) _langBtn.addEventListener('click', function () { setLang(getI18nLang() === 'en' ? 'zh' : 'en'); });
   initTheme();
+  initVersionBox();
   renderAll();
   probeAndBadge();   // 启动轻量探测（变化角标；后端 5 小请求 8s 冷却）。注意：SSE open 分支那句是重连校准，首次 open 不执行——探测只挂这里
   // 移动端：交易/挂单/持有 顶部统计卡片折叠头（默认折叠，点击展开；头本身只在移动端+有数据时由 CSS 显示）
@@ -5885,6 +6069,19 @@ function initTradesSearch() {
 
 // 挂单搜索框事件绑定（仅初始化一次）
 function initOrdersSearch() {
+  // 挂买/挂卖互斥单选筛选按钮（排序按钮前）：再点同钮取消；清除按钮重置（ordersFilter 整体重建含 side:null）
+  const clr0 = $('orderSearchClear');
+  if (clr0 && !$('orderSideBuyBtn')) {
+    const mkSide = (side, labelKey) => {
+      const b = el('button', { cls: 'seg-btn mini order-side-btn', attrs: { type: 'button' }, text: t(labelKey) });
+      b.id = side === 'buy' ? 'orderSideBuyBtn' : 'orderSideSellBtn';
+      b.onclick = () => { ordersFilter.side = (ordersFilter.side === side ? null : side); renderOrders(); };
+      clr0.parentNode.insertBefore(b, clr0);
+      return b;
+    };
+    mkSide('buy', 'order.filterBuy');
+    mkSide('sell', 'order.filterSell');
+  }
   const txt = $('orderSearchText');
   if (txt) txt.addEventListener('input', (e) => { ordersFilter.text = e.target.value; renderOrders(); });
   const df = $('orderDateFrom');
@@ -5895,7 +6092,7 @@ function initOrdersSearch() {
   if (ex) ex.addEventListener('change', (e) => { ordersFilter.exact = e.target.checked; renderOrders(); });
   const clr = $('orderSearchClear');
   if (clr) clr.onclick = () => {
-    ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set() };
+    ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null };
     if (txt) txt.value = '';
     if (df) df.value = '';
     if (dt) dt.value = '';

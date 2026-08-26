@@ -179,5 +179,21 @@ export function createTrader({ state, mteam, collector }) {
     return { ok: true, mechType: reward.mechType || recipe.mechType, mechCardId: reward.mechCardId || null };
   }
 
-  return { buyCard, sellCard, cancelOrder, redemption };
+  // 挂买改价专用：纯限价买单——open 未成交 = 挂上（不撤），filled = 直接成交。
+  // 不走 buyCard 的预算池/价格阈值门与「open 即撤」逻辑（改价语义 = 调整既有挂单价格，非新买入决策）
+  async function relistBuy(msg) {
+    const variant = msg.variant || {};
+    const price = Number(msg.price);
+    if (!variant.filmId || !Number.isFinite(price) || price <= 0) return { ok: false, reason: 'buy_failed' };
+    let json;
+    try {
+      json = await mtFetch('/api/pt-card/market/buy', { filmId: variant.filmId, rarity: variant.rarity, provenance: variant.provenance, price: price });
+    } catch (e) {
+      return { ok: false, reason: 'buy_failed' };  // API_KEY_INVALID / 网络错
+    }
+    if (!json || String(json.code) !== '0' || !json.data) return { ok: false, reason: 'buy_failed' };
+    return { ok: true, filled: String(json.data.status) === 'filled' };
+  }
+
+  return { buyCard, sellCard, cancelOrder, redemption, relistBuy };
 }

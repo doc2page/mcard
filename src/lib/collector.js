@@ -408,7 +408,18 @@ export function createCollector({ state, mteam, normalizers, stats }) {
       try {
         const resp = await mtFetch('/api/pt-card/inventory', { pageNumber: 1, pageSize: 200 });
         if (resp && resp.code === '0' && resp.data && Array.isArray(resp.data.data)) {
-          const items = resp.data.data.map(normalizers.normalizeInventory).filter(Boolean);
+          // 翻页拿全：持有 >200 张时单页会漏尾页（曾致本地恒差 N、探测角标永远去不掉）
+          let rawItems = resp.data.data.slice();
+          const total = Number(resp.data.total) || rawItems.length;
+          let page = 1;
+          while (rawItems.length < total && page < 20) {
+            page++;
+            await randSleep(400, 900);
+            const rp = await mtFetch('/api/pt-card/inventory', { pageNumber: page, pageSize: 200 });
+            if (!rp || rp.code !== '0' || !rp.data || !Array.isArray(rp.data.data) || !rp.data.data.length) break;
+            rawItems = rawItems.concat(rp.data.data);
+          }
+          const items = rawItems.map(normalizers.normalizeInventory).filter(Boolean);
           // 机制卡持有（mechanism/list，独立接口；失败不影响普通卡）
           let mechItems = [];
           try {
@@ -417,7 +428,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
               mechItems = mechResp.data.map(normalizers.normalizeMechanism).filter(Boolean);
             }
           } catch (e) { console.warn('[mcard] mechanism fetch failed', e); }
-          await state.update({ inventory: items, mechInventory: mechItems, inventoryTotal: Number(resp.data.total) || items.length, inventoryFetchedAt: Date.now() });
+          await state.update({ inventory: items, mechInventory: mechItems, inventoryTotal: total || items.length, inventoryFetchedAt: Date.now() });
           out.count = items.length + mechItems.length;
           console.log('[mcard] inventory loaded', items.length, '+ mech', mechItems.length);
         } else {

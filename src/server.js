@@ -1,6 +1,7 @@
 // src/server.js
 import express from 'express';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openStore } from './store.js';
 import { createState } from './state.js';
@@ -85,7 +86,8 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
   }
 
   app.use(express.static(publicDir));
-  app.use(createApiRouter({ state, collector, trader, mteam }));
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  app.use(createApiRouter({ state, collector, trader, mteam, version: pkg.version }));
   app.use(createSseRouter({ state }));
 
   const host = process.env.HOST || '127.0.0.1';
