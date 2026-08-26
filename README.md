@@ -62,7 +62,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.3.0
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.4.0
 ```
 
 或 `docker-compose.yml`：
@@ -70,7 +70,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.3.0
+    image: doc2page/mcard:1.4.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -143,7 +143,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # 升级（先备份！见上节）
 docker compose down
-docker pull doc2page/mcard:latest        # 或指定版本如 :1.3.0
+docker pull doc2page/mcard:latest        # 或指定版本如 :1.4.0
 docker compose up -d
 
 # 回滚：把 docker-compose.yml 里 image 改回旧版本 tag，再 up -d

@@ -62,7 +62,7 @@ The image is published on [Docker Hub](https://hub.docker.com/r/doc2page/mcard) 
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.3.0
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.4.0
 ```
 
 Or `docker-compose.yml`:
@@ -70,7 +70,7 @@ Or `docker-compose.yml`:
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.3.0
+    image: doc2page/mcard:1.4.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -143,7 +143,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # Upgrade (back up first! see above)
 docker compose down
-docker pull doc2page/mcard:latest        # or a pinned version like :1.3.0
+docker pull doc2page/mcard:latest        # or a pinned version like :1.4.0
 docker compose up -d
 
 # Rollback: change the image tag in docker-compose.yml back to the previous version, then up -d
