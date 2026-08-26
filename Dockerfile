@@ -9,7 +9,7 @@ WORKDIR /app
 
 # 先装依赖（利用 docker 层缓存）
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --registry=https://registry.npmmirror.com  # npmmirror 镜像：官方源在部分网络/代理下不稳定（曾致 build 卡死），镜像对全球开放且国内快
 
 # 复制源码 + 前端
 COPY src ./src
