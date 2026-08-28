@@ -102,9 +102,9 @@ let ordersSortDir = 'desc';  // 当前挂单排序：'desc'(最新在上) | 'asc
 let invSortDir = 'desc';     // 持有卡片排序
 let tradesSortDir = 'desc';  // 交易记录排序
 let apiKeyInvalidShown = false;  // 令牌失效弹窗会话级去重（避免每次 state 更新都弹；用户保存新 key 后重置）
-let tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null }; // 交易记录搜索条件（前端临时；exact=精确等于，否则模糊包含；side=buy/sell 筛选）
-let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null }; // 挂单搜索条件（前端临时；side=null|'buy'|'sell' 挂买/挂卖互斥单选筛选）
-let inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/交易锁多选；showLocked=显示手动锁定的卡，默认隐藏）
+let tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mechs: new Set(), titles: new Set(), side: null }; // 交易记录搜索条件（前端临时；exact=精确等于，否则模糊包含；side=buy/sell 筛选）
+let ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mechs: new Set(), titles: new Set(), side: null }; // 挂单搜索条件（前端临时；side=null|'buy'|'sell' 挂买/挂卖互斥单选筛选）
+let inventoryFilter = { text: '', rarities: new Set(), mechs: new Set(), exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false }; // 持有卡片筛选（文本 + 稀有度/机制卡/称号/来源/交易锁多选；showLocked=显示手动锁定的卡，默认隐藏）
 
 function send(msg) {
   const d = window.dispatch(msg);
@@ -1609,14 +1609,14 @@ function filterMyTrades(list) {
   const text = (f.text || '').trim().toLowerCase();
   const kws = text ? text.split(/\s+/).filter(Boolean) : [];
   const hasDate = !!(f.dateFrom || f.dateTo);
-  const hasRarity = f.mech || (f.rarities && f.rarities.size > 0);
+  const hasRarity = (f.mechs && f.mechs.size > 0) || (f.rarities && f.rarities.size > 0);   // mech 细分勾选也构成稀有度判定（原 f.mech 布尔已拆 mechs Set）
   const hasTitle = f.titles && f.titles.size > 0;
   if (!kws.length && !hasDate && !hasRarity && !hasTitle && !f.side) return list;
   return list.filter((it) => {
     if (f.side && it.side !== f.side) return false;
     if (hasRarity) {
       const m = isMechCard(it);
-      if (m) { if (!f.mech) return false; }
+      if (m) { if ((f.mechs && f.mechs.size ? !f.mechs.has(mechTypeOf(it)) : true)) return false; }
       else { if (!f.rarities.has(it.rarity || 'N')) return false; }
     }
     if (hasTitle && it.title && !f.titles.has(it.title)) return false;
@@ -1646,14 +1646,14 @@ function filterOrders(list) {
   const text = (f.text || '').trim().toLowerCase();
   const kws = text ? text.split(/\s+/).filter(Boolean) : [];
   const hasDate = !!(f.dateFrom || f.dateTo);
-  const hasRarity = f.mech || (f.rarities && f.rarities.size > 0);
+  const hasRarity = (f.mechs && f.mechs.size > 0) || (f.rarities && f.rarities.size > 0);   // mech 细分勾选也构成稀有度判定（原 f.mech 布尔已拆 mechs Set）
   const hasTitle = f.titles && f.titles.size > 0;
   if (!kws.length && !hasDate && !hasRarity && !hasTitle && !f.side) return list;
   return list.filter((it) => {
     if (f.side && it.side !== f.side) return false;   // 挂买/挂卖互斥单选
     if (hasRarity) {
       const m = isMechCard(it);
-      if (m) { if (!f.mech) return false; }
+      if (m) { if ((f.mechs && f.mechs.size ? !f.mechs.has(mechTypeOf(it)) : true)) return false; }
       else { if (!f.rarities.has(it.rarity || 'N')) return false; }
     }
     if (hasTitle && it.title && !f.titles.has(it.title)) return false;
@@ -3981,11 +3981,11 @@ function filterInventory(list) {
   // 兑换子模式：强制稀有度=配方档、排除机制卡、忽略来源/交易锁筛选（称号筛选保留可用——用户约定）；
   // showLocked 语义照旧（锁定卡默认隐藏，开启后可见、选卡层拦截）
   const f = redeemMode && REDEEM_RECIPES[redeemMode]
-    ? Object.assign({}, inventoryFilter, { rarities: new Set([REDEEM_RECIPES[redeemMode].rarity]), mech: false, source: new Set(), lock: false })
+    ? Object.assign({}, inventoryFilter, { rarities: new Set([REDEEM_RECIPES[redeemMode].rarity]), mechs: new Set(), source: new Set(), lock: false })
     : inventoryFilter;
   const text = (f.text || '').trim().toLowerCase();
   const kws = text ? text.split(/\s+/).filter(Boolean) : [];
-  const hasRarity = f.mech || (f.rarities && f.rarities.size > 0);
+  const hasRarity = (f.mechs && f.mechs.size > 0) || (f.rarities && f.rarities.size > 0);   // mech 细分勾选也构成稀有度判定（原 f.mech 布尔已拆 mechs Set）
   const hasTitle = f.titles && f.titles.size > 0;
   const hasSource = f.source && f.source.size > 0;
   const hasLock = !!f.lock;
@@ -3994,7 +3994,7 @@ function filterInventory(list) {
   return list.filter((it) => {
     const mech = isMechCard(it);
     if (hasRarity) {
-      if (mech) { if (!f.mech) return false; }
+      if (mech) { if ((f.mechs && f.mechs.size ? !f.mechs.has(mechTypeOf(it)) : true)) return false; }
       else { if (!f.rarities.has(it.rarity || 'N')) return false; }
     }
     if (hasTitle && it.title && !f.titles.has(it.title)) return false;
@@ -4820,7 +4820,14 @@ function buildFilterChips(boxId, filterObj, renderFn, withSource, withLock) {
   });
   // 来源组：机制卡（所有 view）+ 掉落/制造（持有 withSource）
   groupLabel(t('inv.metricSource'));
-  box.appendChild(mkChip('r-mech' + (filterObj.mech ? ' on' : ''), t('cfg.mech'), () => { filterObj.mech = !filterObj.mech; renderFn(); }, 'source'));
+  MECH_TYPES.forEach((mt) => {
+    const on = filterObj.mechs.has(mt.type);
+    box.appendChild(mkChip('r-mech' + (on ? ' on' : ''), t('mech.' + mt.type), () => {
+      if (filterObj.mechs.has(mt.type)) filterObj.mechs.delete(mt.type);
+      else filterObj.mechs.add(mt.type);
+      renderFn();
+    }, 'source'));
+  });
   if (withSource) {
     [['drop', t('inv.drop')], ['crafted', t('inv.crafted')]].forEach(([key, lbl]) => {
       const on = filterObj.source.has(key);
@@ -6163,7 +6170,7 @@ function initTradesSearch() {
   if (ex) ex.addEventListener('change', (e) => { tradesFilter.exact = e.target.checked; renderTrades(); });
   const clr = $('tradeSearchClear');
   if (clr) clr.onclick = () => {
-    tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null };
+    tradesFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mechs: new Set(), titles: new Set(), side: null };
     if (txt) txt.value = '';
     if (df) df.value = '';
     if (dt) dt.value = '';
@@ -6197,7 +6204,7 @@ function initOrdersSearch() {
   if (ex) ex.addEventListener('change', (e) => { ordersFilter.exact = e.target.checked; renderOrders(); });
   const clr = $('orderSearchClear');
   if (clr) clr.onclick = () => {
-    ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mech: false, titles: new Set(), side: null };
+    ordersFilter = { text: '', dateFrom: '', dateTo: '', exact: false, rarities: new Set(), mechs: new Set(), titles: new Set(), side: null };
     if (txt) txt.value = '';
     if (df) df.value = '';
     if (dt) dt.value = '';
@@ -6214,7 +6221,7 @@ function initInventorySearch() {
   if (ex) ex.addEventListener('change', (e) => { inventoryFilter.exact = e.target.checked; renderInventory(); });
   const clr = $('inventorySearchClear');
   if (clr) clr.onclick = () => {
-    inventoryFilter = { text: '', rarities: new Set(), mech: false, exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false };
+    inventoryFilter = { text: '', rarities: new Set(), mechs: new Set(), exact: false, titles: new Set(), source: new Set(), lock: false, showLocked: false };
     if (txt) txt.value = '';
     if (ex) ex.checked = false;
     renderInventory(); // buildInventoryChips 依新 inventoryFilter 重建 chips 选中态，无需手动清 on
