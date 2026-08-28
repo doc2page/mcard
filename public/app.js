@@ -1018,7 +1018,7 @@ function detectCurrentPreset() {
 
 function renderCards() {
   const grid = $('grid');
-  const hasTags = ((state.config && state.config.searchTags) || []).length > 0;
+  const hasTags = hasSearchTags();   // 尊重定向开关（曾直接读 config.searchTags——关闭开关后仍走 searchResults 分支渲染 null，常规市场空白）
   if (hasTags && searching) {   // 定向搜索串行中：显示 loading（绕过 _sig，结果回来时重绘）
     grid._sig = null;
     grid.replaceChildren();
@@ -4587,7 +4587,7 @@ function openBatchBuy() {
 // 按当前网格渲染源（定向搜索结果优先，否则 buckets+mechBucket）用 batchSelected 的 key 集合回查市场 it 对象。
 // 与 renderCards 同源判断：hasTags（config.searchTags 非空）→ 模块级 searchResults；否则 buckets（{<rarity>:{items:[]}}）+ mechBucket（{items:[]}）。
 function marketSelectedItems() {
-  var hasTags = ((state.config && state.config.searchTags) || []).length > 0;
+  var hasTags = hasSearchTags();   // 同 renderCards：尊重定向开关（关闭时批量选择回查 buckets 源）
   var src;
   if (hasTags) {
     src = (searchResults || []).slice();  // 模块级裸变量（renderCards 同款）
@@ -4886,7 +4886,11 @@ function buildMarketTitleChips() {
 let searchResults = null;   // null=未查询(走 buckets)；数组=定向搜索结果(已映射成 buckets item 结构，复用 renderCards)
 let searching = false;      // 串行查询中(loading)
 let _searchSeq = 0;         // 防并发：只采纳最新一次查询的结果
-function hasSearchTags() { return ((state.config && state.config.searchTags) || []).length > 0; }
+function hasSearchTags() {
+  var cb = $('directedEnabled');
+  if (cb && !cb.checked) return false;   // 定向搜索开关：取消勾选 = 暂时回到常规市场（词条保留，重新勾选即恢复）
+  return ((state.config && state.config.searchTags) || []).length > 0;
+}
 
 // ============ 定向搜索词条（v1.3.1：词条支持稀有度/称号/每档最大价筛选） ============
 // 词条结构 { name, rarities[], titles[], maxPrices{UR:n,...} }；旧纯字符串词条兼容 = 无筛选。
@@ -4902,6 +4906,21 @@ function buyLimitOf(filmName, rarity) {
     return 0;   // 旧字符串词条（无筛选）= 不限
   }
   return Number(((state.config && state.config.maxPriceByRarity) || {})[rarity]) || 0;
+}
+
+function initDirectedToggle() {
+  var cb = $('directedEnabled');
+  if (!cb || cb._inited) return;
+  cb._inited = true;
+  cb.checked = state && state.config && state.config.directed !== false;   // 启动恢复（config.directed 默认 true，跨设备同步）
+  cb.addEventListener('change', () => {
+    if (state.config) state.config.directed = cb.checked;   // 乐观更新（持久化到后端 config，跨设备）
+    send({ type: 'SET_CONFIG', config: { directed: cb.checked } });
+    searchResults = cb.checked ? searchResults : null;   // 关闭时清定向结果（回到 buckets 渲染）
+    renderSearchTags();
+    renderCards();
+    triggerMarketRefresh(true);   // 立即拉对应数据流：开启→runSearch，关闭→常规市场采集（force 绕节流）
+  });
 }
 
 function renderSearchTags() {
@@ -6119,6 +6138,7 @@ function applyLabUrl() {
   var _langBtn = document.getElementById('langBtn');
   if (_langBtn) _langBtn.addEventListener('click', function () { setLang(getI18nLang() === 'en' ? 'zh' : 'en'); });
   initTheme();
+  initDirectedToggle();
   initVersionBox();
   renderAll();
   probeAndBadge();   // 启动轻量探测（变化角标；后端 5 小请求 8s 冷却）。注意：SSE open 分支那句是重连校准，首次 open 不执行——探测只挂这里

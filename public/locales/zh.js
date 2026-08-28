@@ -141,6 +141,7 @@ registerMessages('zh', {
   'search.clear': '清除',
   'search.titleLabel': '称号',
   'search.directed': '定向搜索',
+  'search.directedEnabled': '启用',
   'search.tagAdd': '添加定向搜索',
   'search.tagEdit': '编辑词条',
   'search.tagFilm': '片名',

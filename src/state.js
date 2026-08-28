@@ -11,6 +11,7 @@ const DEFAULT_STATE = {
     presets: [],
     viewMode: 'price',
     searchTags: [],
+    directed: true,   // 定向搜索开关（关闭=暂时回常规市场，词条保留；跨设备同步）
     budget: { total: 0, spent: 0 },
     lang: null,
     apiKey: '',

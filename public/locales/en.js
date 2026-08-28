@@ -136,6 +136,7 @@ registerMessages('en', {
   'search.clear': 'Clear',
   'search.titleLabel': 'Title',
   'search.directed': 'Directed Search',
+  'search.directedEnabled': 'Enabled',
   'search.tagAdd': 'Add directed search',
   'search.tagEdit': 'Edit tag',
   'search.tagFilm': 'Film',

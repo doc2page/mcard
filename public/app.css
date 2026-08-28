@@ -2358,3 +2358,7 @@ body.no-token .layout > main { display: none !important; }
 .cb-lp-tag.lk { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }        /* 已锁 */
 .cb-lp-tag.ul { color: var(--text-dim); background: var(--surface-2); }                                /* 未锁 */
 .cb-lp-tag.lp { color: var(--muted); background: var(--surface-2); font-style: italic; }               /* 挂单中 */
+
+/* 定向搜索启用开关（词条行右侧） */
+.directed-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; margin-left: 4px; }
+.directed-toggle input { accent-color: var(--accent); }
