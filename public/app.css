@@ -1095,15 +1095,19 @@ button.stat.active .stat-val { color: var(--accent); }
 .cb-tn.tt-4 { color: #7a5bd0; }
 [data-theme="light"] .cb-tn.tt-4 { color: #b3a6ff; }
 .cb-tn.tt-5 { color: var(--cb-sale); }
-.cb-cells { display: flex; border-radius: 5px; overflow: hidden; }
+.cb-cells { display: flex; }   /* 圆角改由两格分摊（左格左圆角/右格右圆角）——不用 overflow:hidden 裁角，否则格级 box-shadow（锁定描边）被裁只剩交界竖线 */
 .cb-cell { min-width: 17px; padding: 2px 3px; font-size: 11px; font-weight: 800; line-height: 1.45; text-align: center; font-variant-numeric: tabular-nums; }
-.cb-cell.hold { background: var(--cb-hold); color: #fff; }
-.cb-cell.sale { background: var(--cb-sale); color: var(--cb-sale-ink); }
+.cb-cell.hold { background: var(--cb-hold); color: #fff; border-radius: 5px 0 0 5px; }
+.cb-cell.sale { background: var(--cb-sale); color: var(--cb-sale-ink); border-radius: 0 5px 5px 0; }
 .cb-cell.zero { opacity: 0.22; }  /* 0 值极淡：有量的格子一眼跳出（热力语义） */
+.cb-cell.hold.locked { box-shadow: 0 0 0 1.5px var(--accent); border-radius: 5px; }  /* 有已锁卡：仅左格（持有格）主题色描边——格级 shadow 不再被容器裁剪 */
 /* 图例（卡片外，固定双主题色） */
 .cb-legend { display: flex; align-items: center; gap: 8px; margin: 0 2px 12px; font-size: 11px; color: var(--muted); }
 .cb-lg-cell { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
 .cb-lg-cell.hold { background: #1f6e43; color: #fff; }
+/* 锁定图例项：描边示例格（无文字，纯演示）+ 文字说明，整体跟在双格说明后 */
+.cb-lg-lock { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }
+.cb-lg-cell.locked-demo { box-shadow: 0 0 0 1.5px var(--accent); min-width: 22px; min-height: 14px; display: inline-block; }  /* 空示例格无内容撑高：固定尺寸防塌陷 */
 .cb-lg-cell.sale { background: #b06a00; color: #fff; }
 [data-theme="light"] .cb-lg-cell.hold { background: #2f8a58; }
 [data-theme="light"] .cb-lg-cell.sale { background: #f5a623; color: #241c10; }
@@ -1685,6 +1689,7 @@ body.no-token .layout > main { display: none !important; }
   .cb-tn { font-size: 8px; letter-spacing: 0; }
   .cb-cell { min-width: 13px; font-size: 10px; padding: 1px; }
   .cb-legend { font-size: 10px; margin-bottom: 8px; gap: 6px; flex-wrap: wrap; }
+  .cb-lg-lock { order: 5; flex-basis: 100%; margin: 2px 0 0; }  /* 移动端：锁定说明整项换第二行 */
 }
 @media (max-width: 540px) {
   .portrait-kpi { grid-template-columns: 1fr; }
@@ -2311,3 +2316,45 @@ body.no-token .layout > main { display: none !important; }
 .seg-btn.mini.order-side-btn.side-on { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 700; }  /* 挂买/挂卖筛选激活态 */
 .version-box { display: flex; flex-direction: column; gap: 1px; }
 .version-box .vb-newer { color: var(--accent); font-weight: 700; }  /* 有新版本高亮 */
+
+/* ============ 卡册一键锁（poster 左上角） + hover 状态面板 ============ */
+/* 锁按钮方案 A：半透明深底衬垫 + 白图标（poster 任意亮度下稳定可读，同 .ca-open 视觉语言） */
+.cb-lock-btn {
+  position: absolute; top: 6px; left: 6px; z-index: 3;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: none; padding: 0;
+  border-radius: 8px;
+  background: rgba(10, 11, 14, 0.55);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  opacity: 0.82;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s;
+}
+.cb-lock-btn:hover { opacity: 1; transform: scale(1.1); }
+.cb-lock-btn.on { color: #ffd98a; opacity: 1; }   /* 全锁态：金色锁体（深底上恒可读） */
+.cb-lock-panel {
+  position: fixed; z-index: 300;
+  min-width: 200px; max-width: 300px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--overlay);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.6);
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
+}
+.cb-lp-title { font-size: 11px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-lp-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cb-lp-r { flex: 0 0 26px; font-size: 10px; font-weight: 800; text-align: center; padding: 1px 0; border-radius: 4px; }
+.cb-lp-r.r-UR { color: var(--r-UR); background: color-mix(in srgb, var(--r-UR) 18%, transparent); }
+.cb-lp-r.r-SSR { color: var(--r-SSR); background: color-mix(in srgb, var(--r-SSR) 18%, transparent); }
+.cb-lp-r.r-SR { color: var(--r-SR); background: color-mix(in srgb, var(--r-SR) 18%, transparent); }
+.cb-lp-r.r-R { color: var(--r-R); background: color-mix(in srgb, var(--r-R) 18%, transparent); }
+.cb-lp-r.r-N { color: var(--r-N); background: color-mix(in srgb, var(--r-N) 18%, transparent); }
+.cb-lp-tag { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+.cb-lp-tag.lk { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }        /* 已锁 */
+.cb-lp-tag.ul { color: var(--text-dim); background: var(--surface-2); }                                /* 未锁 */
+.cb-lp-tag.lp { color: var(--muted); background: var(--surface-2); font-style: italic; }               /* 挂单中 */

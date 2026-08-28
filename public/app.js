@@ -540,12 +540,14 @@ function computeCardBook() {
   function add(c, listed) {
     if (!c || !c.filmId || c.provenance === 'mech') return;   // 机制卡不统计
     let f = films.get(c.filmId);
-    if (!f) { f = { filmId: c.filmId, filmName: c.filmName || '', poster: c.poster || '', rarities: {}, titles: {} }; films.set(c.filmId, f); }
-    const r = f.rarities[c.rarity] || (f.rarities[c.rarity] = {});        // { 稀有度: { 称号: {hold,listed} } }
-    const tk = c.title || '';
-    const b = r[tk] || (r[tk] = { hold: 0, listed: 0 });
+    if (!f) { f = { filmId: c.filmId, filmName: c.filmName || '', poster: c.poster || '', rarities: {}, titles: {}, cards: [] }; films.set(c.filmId, f); }
+    const _r = c.rarity || 'N', _tk = c.title || '';
+    f.cards.push({ cardId: c.cardId, rarity: _r, title: _tk, listed: listed, locked: !listed && lockedSet.has(String(c.cardId)) });
+    const r = f.rarities[_r] || (f.rarities[_r] = {});        // { 稀有度: { 称号: {hold,listed,locked} } }
+    const b = r[_tk] || (r[_tk] = { hold: 0, listed: 0, locked: 0 });
     b[listed ? 'listed' : 'hold']++;
-    if (tk) f.titles[tk] = true;                                          // 卡片级称号集合（加权排序每称号只计一次）
+    if (!listed && lockedSet.has(String(c.cardId))) b.locked++;   // 矩阵左格描边：该稀有度×称号下有已锁卡
+    if (_tk) f.titles[_tk] = true;                                        // 卡片级称号集合（加权排序每称号只计一次）——变量改名 tk→_tk 时漏改此行（曾致 ReferenceError 卡册打不开）
   }
   const invIds = new Set();
   (state.inventory || []).forEach((c) => { invIds.add(String(c.cardId || '')); add(c, false); });
@@ -558,6 +560,18 @@ function computeCardBook() {
     f.rarityCount = Object.keys(f.rarities).length;                                            // 集齐稀有度种数
     f.rarityScore = Object.keys(f.rarities).reduce((s, r) => s + (CB_RARITY_WEIGHT[r] || 0), 0);  // 档位质量：有该档则计一次权重（UR30>SSR10>SR5>R3>N1）
     f.titleScore = Object.keys(f.titles).reduce((s, tk) => s + (CB_TITLE_WEIGHT[tk] || 0), 0);  // 称号含金量：每称号计一次
+    // 一键锁目标：每稀有度未挂单卡中称号最高的一张（薪王→…→傳火→无称号）+ 该影片全部已锁卡
+    f.lockTargets = {};   // { rarity: cardId }
+    let allTargetsLocked = true;
+    for (const r of Object.keys(f.rarities)) {
+      const cands = f.cards.filter((c) => c.rarity === r && !c.listed);
+      if (!cands.length) continue;   // 该档全挂单：无目标（不参与判定）
+      cands.sort((a, b) => (CB_TITLE_WEIGHT[b.title] || 0) - (CB_TITLE_WEIGHT[a.title] || 0) || String(a.cardId).localeCompare(String(b.cardId)));
+      f.lockTargets[r] = cands[0].cardId;
+      if (!lockedSet.has(String(cands[0].cardId))) allTargetsLocked = false;
+    }
+    f.allLocked = allTargetsLocked;   // 无可锁目标=没有未锁的卡视为锁定态（全挂单的影片整体隐藏锁图标，见 buildCardBookCard）
+    f.lockedCardIds = f.cards.filter((c) => lockedSet.has(String(c.cardId))).map((c) => c.cardId);
   }
   // 排序：稀有度种数 ↓ → 稀有度加权和 ↓（种数同档时高档位优先）→ 称号加权分 ↓ → 片名
   arr.sort((a, b) => b.rarityCount - a.rarityCount || b.rarityScore - a.rarityScore || b.titleScore - a.titleScore || String(a.filmName).localeCompare(String(b.filmName)));
@@ -604,6 +618,36 @@ function buildCardBookCard(f, delay) {
     pw.appendChild(img);
   } else fb.style.display = 'grid';
   pw.appendChild(fb);
+  // poster 左上角：一键锁（每稀有度锁未挂单中称号最高一张；已全锁则一键解锁全部——含手动锁的；换代自动换锁高称号解低称号）
+  // 全挂单的影片隐藏锁图标（含底衬）——没有可锁目标，不是我们的锁，语义清晰
+  const allListed = f.cards.length > 0 && f.cards.every((c) => c.listed);
+  const lk = allListed ? null : el('button', { cls: 'cb-lock-btn' + (f.allLocked ? ' on' : ''), attrs: { type: 'button', 'aria-label': t('cardBook.lockToggle'), title: t(f.allLocked ? 'cardBook.lockHintOn' : 'cardBook.lockHintOff') } });  // title 进 attrs（悬浮提示按态）；全挂单 null 不再触碰
+  if (lk) {
+  lk.appendChild(svgEl('svg', { attrs: { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' } }));
+  var lkBody = lk.querySelector('svg');
+  lkBody.appendChild(svgEl('rect', { attrs: { x: 3, y: 7, width: 10, height: 7, rx: 1.5, stroke: 'currentColor', 'stroke-width': 1.6 } }));
+  lkBody.appendChild(svgEl('path', { attrs: { d: f.allLocked ? 'M5 7V5a3 3 0 0 1 6 0v2' : 'M5 7V5a3 3 0 0 1 5.8-1', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' } }));
+  if (f.allLocked) lkBody.appendChild(svgEl('circle', { attrs: { cx: 8, cy: 10.5, r: 1.2, fill: 'currentColor' } }));
+  lk.onclick = (e) => {
+    e.stopPropagation();
+    // 现算最新聚合：闭包 f 是渲染时快照，上次点击后 lockedSet 已变而 f.allLocked 过期——曾致第二次点击走错分支（只能点一次）
+    const cf = computeCardBook().find((x) => x.filmId === f.filmId) || f;
+    if (cf.allLocked) {
+      // 一键解锁：该影片所有已锁卡（含手动锁的）
+      cf.lockedCardIds.forEach((cid) => lockedSet.delete(String(cid)));
+    } else {
+      // 一键锁定：每稀有度锁未挂单中称号最高一张；同档低称号旧锁自动解开（换代）
+      Object.keys(cf.lockTargets).forEach((r) => {
+        const tid = String(cf.lockTargets[r]);
+        cf.cards.filter((c) => c.rarity === r && !c.listed && String(c.cardId) !== tid).forEach((c) => lockedSet.delete(String(c.cardId)));
+        lockedSet.add(tid);
+      });
+    }
+    persistLocked();
+    updateCardBookLockUI(f);   // 局部更新：锁图标/描边就地变化，不重绘不跳位（重绘曾致跳顶，恢复滚动只是补救）
+  };
+  pw.appendChild(lk);   // 全挂单时 lk=null：appendChild(null) 是无操作（DOM 规范），安全
+  }
   // 卡片右上角：加入定向搜索（复用市场定向 tag：addSearchTag 去重+持久化+自动查询；不跳转 view）
   // 已设该影片词条 → 图标换编辑铅笔（点击进模态自动转编辑该词条）；未设 → 放大镜新增
   const hasTag = (((state.config && state.config.searchTags) || []).some((x) => tagOf(x) === name));
@@ -636,7 +680,7 @@ function buildCardBookCard(f, delay) {
       const g = el('div', { cls: 'cb-tg' + ((b.hold || b.listed) ? '' : ' cb-none') });
       g.appendChild(el('div', { cls: 'cb-tn ' + (TITLE_TIER[tk] || 'tt-5'), text: tk }));
       const cells = el('div', { cls: 'cb-cells' });
-      cells.appendChild(el('span', { cls: 'cb-cell hold' + (b.hold ? '' : ' zero'), text: String(b.hold) }));
+      cells.appendChild(el('span', { cls: 'cb-cell hold' + (b.hold ? '' : ' zero') + (b.locked ? ' locked' : ''), text: String(b.hold) }));   // 有已锁卡 → 仅左格主题色描边
       cells.appendChild(el('span', { cls: 'cb-cell sale' + (b.listed ? '' : ' zero'), text: String(b.listed) }));
       append(g, cells);
       groups.appendChild(g);
@@ -646,6 +690,7 @@ function buildCardBookCard(f, delay) {
   }
   append(right, rows);
   append(card, pw, right, sb);
+  f._cardEl = card;   // 局部更新引用：锁操作就地更新不重绘（防跳顶的根本解）
   return card;
 }
 
@@ -658,31 +703,73 @@ function cardBookFilmCount() {
 }
 
 let _cbRenderToken = 0;  // 渲染令牌：新渲染请求使旧分片任务作废（防过期批次与新渲染竞争写同一 grid）
+// 卡册锁局部更新：只改该卡 DOM（锁按钮态 + 各稀有度行左格描边），零重绘零跳动。
+// 并预置 box._sig 为新状态（重算 computeCardBook 的 sig）——SSE config patch 触发的 renderCardBook 因 sig 一致跳过，不会二次重绘。
+function updateCardBookLockUI(f) {
+  // 重算该影片聚合（lockTargets/allLocked/locked 计数都依赖 lockedSet）
+  const arr = computeCardBook();
+  const nf = arr.find((x) => x.filmId === f.filmId) || f;
+  const cardEl = f._cardEl;
+  if (!cardEl) { renderCardBook(); return; }   // 兜底：无引用退化全量重绘
+  // ① 锁按钮态
+  const lk = cardEl.querySelector('.cb-lock-btn');
+  if (lk) {
+    lk.classList.toggle('on', !!nf.allLocked);
+    lk.title = t(nf.allLocked ? 'cardBook.lockHintOn' : 'cardBook.lockHintOff');
+    const path = lk.querySelector('path');
+    if (path) path.setAttribute('d', nf.allLocked ? 'M5 7V5a3 3 0 0 1 6 0v2' : 'M5 7V5a3 3 0 0 1 5.8-1');
+    const dot = lk.querySelector('circle');
+    if (nf.allLocked && !dot) lk.querySelector('svg').appendChild(svgEl('circle', { attrs: { cx: 8, cy: 10.5, r: 1.2, fill: 'currentColor' } }));
+    else if (!nf.allLocked && dot) dot.remove();
+  }
+  // ② 矩阵左格描边：每稀有度行内各称号组左格 locked class 按新计数刷新
+  const rows = cardEl.querySelectorAll('.cb-row');
+  rows.forEach((row) => {
+    const rKey = (row.querySelector('.cb-r') || {}).textContent || '';
+    const groups = row.querySelectorAll('.cb-tg');
+    groups.forEach((g) => {
+      const tk = ((g.querySelector('.cb-tn') || {}).textContent || '').trim();
+      const b = (nf.rarities[rKey] || {})[tk === '—' ? '' : tk] || (tk !== '—' ? {} : (nf.rarities[rKey] || {})['']);
+      const holdCell = g.querySelector('.cb-cell.hold');
+      if (holdCell) holdCell.classList.toggle('locked', !!(b && b.locked));
+    });
+  });
+  // ③ 预置 sig：与 renderCardBook 的 sig 公式一致（SSE patch 到来时跳过重绘）
+  const box = $('cardBookView');
+  if (box) box._sig = getI18nLang() + '::' + arr.map((x) => x.filmId + ':' + RARITIES.filter((r) => x.rarities[r]).map((r) => r + Object.keys(x.rarities[r]).filter((tkk) => tkk).map((tkk) => tkk + x.rarities[r][tkk].hold + '/' + x.rarities[r][tkk].listed).join(',')).join(';')).join('|') + '::tags=' + (((state.config && state.config.searchTags) || []).map(tagOf).join(',')) + '::locks=' + Array.from(lockedSet).sort().join(',');
+}
+
 function renderCardBook() {
   const box = $('cardBookView');
   if (!box) return;
+  const _mainEl2 = document.querySelector('.main');
+  const _keepScroll = (_mainEl2 && view === 'cardBook') ? _mainEl2.scrollTop : null;   // 锁操作等触发的重绘保持滚动位置（曾跳顶）
   const arr = computeCardBook();
   // 数据签名：结构未变不重建（SSE 高频 patch 曾致 DOM/img 全量反复重建 → 解码内存峰值叠高、页面卡）。
   // sig 拼入当前语言：setLang→renderAll 时语言变化要穿透签名重建（图例等 t() 固化文案才能实时切换）
-  const sig = getI18nLang() + '::' + arr.map((f) => f.filmId + ':' + RARITIES.filter((r) => f.rarities[r]).map((r) => r + Object.keys(f.rarities[r]).filter((tk) => tk).map((tk) => tk + f.rarities[r][tk].hold + '/' + f.rarities[r][tk].listed).join(',')).join(';')).join('|') + '::tags=' + (((state.config && state.config.searchTags) || []).map(tagOf).join(','));  // 词条名单入 sig：加/删词条重绘（放大镜↔铅笔图标同步）
+  const sig = getI18nLang() + '::' + arr.map((f) => f.filmId + ':' + RARITIES.filter((r) => f.rarities[r]).map((r) => r + Object.keys(f.rarities[r]).filter((tk) => tk).map((tk) => tk + f.rarities[r][tk].hold + '/' + f.rarities[r][tk].listed).join(',')).join(';')).join('|') + '::tags=' + (((state.config && state.config.searchTags) || []).map(tagOf).join(','))  // 词条名单入 sig：加/删词条重绘（放大镜↔铅笔图标同步）
+    + '::locks=' + Array.from(lockedSet).sort().join(',');  // 锁定集合入 sig：一键锁/解后 SSE config patch 触发重绘（锁图标与矩阵描边实时更新）
   if (box._sig === sig) return;
   box._sig = sig;
   _cbRenderToken++;
   const token = _cbRenderToken;
   box.replaceChildren();
   if (!arr.length) { box.appendChild(el('div', { cls: 'drop-empty', text: t('cardBook.empty') })); return; }
-  // 图例：双格语义（左持有 右挂单）+ 称号由低到高
+  // 图例：双格语义（左持有 右挂单）+ 说明 → 锁定项（描边示例格 + 文字说明，跟在整体说明后保持间隔）
   const legend = el('div', { cls: 'cb-legend' });
   append(legend,
     el('span', { cls: 'cb-lg-cell hold', text: t('cardBook.hold') }),
     el('span', { cls: 'cb-lg-cell sale', text: t('cardBook.listed') }),
-    el('span', { cls: 'cb-lg-note', text: t('cardBook.legendNote') }));
+    el('span', { cls: 'cb-lg-note', text: t('cardBook.legendNote') }),
+    (() => { const lg = el('span', { cls: 'cb-lg-lock' }); append(lg, el('span', { cls: 'cb-lg-cell hold locked-demo' }), el('span', { text: t('cardBook.lockNote') })); return lg; })());
   box.appendChild(legend);
   const grid = el('div', { cls: 'cb-grid' });
   box.appendChild(grid);
+  const restoreScroll = () => { if (_keepScroll != null) requestAnimationFrame(() => { requestAnimationFrame(() => { _mainEl2.scrollTop = _keepScroll; }); }); };  // 双 rAF：等填充布局稳定后恢复（单次在分片场景被高度 clamp）
   if (arr.length <= 40) {
     // 卡少：同步建（保留 stagger 入场动画）
     arr.forEach((f, i) => grid.appendChild(buildCardBookCard(f, Math.min(i, 20) * 25)));
+    restoreScroll();
     return;
   }
   // 卡多：rAF 分片渲染——上万节点单帧同步插入会卡死主线程几百 ms；每帧一批 + DocumentFragment 批量插，首帧即出首屏
@@ -695,6 +782,7 @@ function renderCardBook() {
     for (let end = Math.min(i + CHUNK, arr.length); i < end; i++) frag.appendChild(buildCardBookCard(arr[i], 0));
     grid.appendChild(frag);
     if (i < arr.length) requestAnimationFrame(fill);
+    else restoreScroll();   // 分片全部完成：恢复滚动
   })();
 }
 
@@ -706,7 +794,7 @@ function triggerMarketRefresh(force) {
   var now = Date.now();
   if (!force && now - _lastMarketRefreshAt < 8000) return;   // 节流：冷却内静默忽略
   _lastMarketRefreshAt = now;
-  var p = hasSearchTags() ? runSearch() : send({ type: 'REFRESH_NOW' });
+  var p = hasSearchTags() ? runSearch(force) : send({ type: 'REFRESH_NOW' });   // force 透传：定向模式购买后强制刷新搜索结果（绕 2s 节流）
   var rbtn = $('refreshBtn');
   if (rbtn) {
     rbtn.classList.add('refreshing');
@@ -715,7 +803,10 @@ function triggerMarketRefresh(force) {
   }
 }
 
+var viewScrollPos = {};   // 每 view 独立滚动位置（曾共享 .main 滚动——切 view 位置串扰，一直以来的 bug）
 function toggleView(v) {
+  var _mainEl = document.querySelector('.main');
+  if (_mainEl && view) viewScrollPos[view] = _mainEl.scrollTop;   // 离开当前 view：保存
   view = v;
   if (v !== 'inventory') redeemMode = null;   // 切出持有 view：退出兑换子模式
   if (viewBadges[v] !== undefined && viewBadges[v] > 0) { viewBadges[v] = 0; renderBadges(); }  // 进 view 清零持久角标（已看=已知悉）
@@ -731,6 +822,7 @@ function toggleView(v) {
   // 移动端抽屉：切 view 后自动关闭
   var _sb = document.querySelector('.sidebar'); if (_sb) _sb.classList.remove('open');
   var _mk = $('drawerMask'); if (_mk) _mk.classList.remove('open');
+  if (_mainEl) requestAnimationFrame(() => { _mainEl.scrollTop = viewScrollPos[v] || 0; });   // 进入目标 view：恢复其滚动位置（rAF 等 renderLive 重绘完成）
 }
 
 // 聚合各数据源算画像（资料卡称号/氛围色 + 画像页复用）
@@ -4072,7 +4164,7 @@ async function execBatchStep(step) {
     }
     if (step.kind === 'buy') {
       var _rar = step.params.rarity || (step.params.variant || {}).rarity || '';
-      var _monLimit = Number(((state.config && state.config.maxPriceByRarity) || {})[_rar]) || 0;
+      var _monLimit = buyLimitOf(step.params.filmName, _rar);
       var b = await send({ type: 'BUY_CARD', variant: step.params.variant, expectPrice: step.params.expectPrice, filmName: step.params.filmName, poster: step.params.poster, rarity: step.params.rarity, title: step.params.title, maxPrice: _monLimit, skipRefresh: true });
       var confirmed = !!(b && b.confirmed);
       var isUnfilled = !!(b && b.reason === 'unfilled' && !b.cancelFailed);  // 仅 open+cancel成功 才算"未成交"；cancel_failed/budget_*/buy_failed 都是真失败
@@ -4794,6 +4886,17 @@ function hasSearchTags() { return ((state.config && state.config.searchTags) || 
 // 勾选稀有度/称号 = 只要勾选项（无称号卡在勾称号时排除，同市场筛选语义）；都不勾 = 全要；每档最大价空 = 不限。
 function tagOf(tg) { return (tg && typeof tg === 'object') ? tg.name : tg; }
 
+// 购买阈值门：常规市场用全局 maxPriceByRarity；定向搜索模式所见即所得、所点即所要——不受常规阈值模板限制，
+// 改用该词条自己的 maxPrices（词条该档没设价 = 0 = 不限）。searchResults 非空 = 当前处于定向结果模式。
+function buyLimitOf(filmName, rarity) {
+  if (searchResults) {
+    const tag = (((state.config && state.config.searchTags) || []).find((tg) => tagOf(tg) === filmName));
+    if (tag && typeof tag === 'object') return Number((tag.maxPrices || {})[rarity]) || 0;
+    return 0;   // 旧字符串词条（无筛选）= 不限
+  }
+  return Number(((state.config && state.config.maxPriceByRarity) || {})[rarity]) || 0;
+}
+
 function renderSearchTags() {
   const mf = $('marketFilter');
   if (mf) mf.classList.toggle('has-tags', hasSearchTags());  // 有 tag → 隐藏稀有度/机制卡/称号/价格阈值筛选行
@@ -4939,11 +5042,11 @@ async function removeSearchTagAt(index) {
 }
 
 // 发起定向搜索：串行查所有 tag → 合并去重 → 一次渲染。pageSize 用页面选的 listPageSize。
-async function runSearch() {
+async function runSearch(force) {
   const tags = ((state.config && state.config.searchTags) || []);
   if (!tags.length) { searchResults = null; searching = false; if (view === 'market') renderCards(); return; }
-  var _now = Date.now();                                   // 2s 节流：seq 只丢弃旧结果不挡连发——连点/回车连击每次都打 M-TEAM search（反风控）
-  if (runSearch._lastAt && _now - runSearch._lastAt < 2000) return;
+  var _now = Date.now();                                   // 2s 节流：seq 只丢弃旧结果不挡连发——连点/回车连击每次都打 M-TEAM search（反风控）；force 绕过（购买后必须刷新结果）
+  if (!force && runSearch._lastAt && _now - runSearch._lastAt < 2000) return;
   runSearch._lastAt = _now;
   if (!hasApiKey(state)) return;
   const seq = ++_searchSeq;
@@ -4979,7 +5082,9 @@ async function runSearch() {
     }
     for (const it of its) {
       const v = it.variant || {};
-      const key = [v.filmId || it.filmId || '', v.rarity || it.rarity || '', v.provenance || it.provenance || ''].join('|');
+      // 去重 key 必须含价格+称号：search 接口返回同片同稀有度的多张挂单（不同价/称号），
+      // 三元组粗 key 会把它们压成一张、留接口返回序第一张（曾表现为"只显示价格高的那张"）
+      const key = [v.filmId || it.filmId || '', v.rarity || it.rarity || '', v.provenance || it.provenance || '', v.title || it.title || '', Number(it.lowestAsk) || 0].join('|');
       if (!seen.has(key)) { seen.add(key); all.push(it); }
     }
   }
@@ -5316,7 +5421,7 @@ async function onBuy(it) {
   let resp;
   try {
     const _rar = (it.rarity || (it.variant || {}).rarity || '');
-    const _monLimit = Number(((state.config && state.config.maxPriceByRarity) || {})[_rar]) || 0;
+    const _monLimit = buyLimitOf(name, _rar);   // 定向模式所见即所得（词条价门），常规模式全局阈值
     resp = await send({ type: 'BUY_CARD', variant: it.variant, expectPrice: Number(price), filmName: name, poster: it.poster || '', rarity: _rar, title: (it.title || ''), maxPrice: _monLimit });
   } catch (e) {
     resp = { ok: false, reason: 'error' };
