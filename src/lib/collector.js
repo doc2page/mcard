@@ -479,8 +479,16 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     // myorders：最新一页 100 条，数 id > 本地最大记录 id 的条数 = 新增挂单记录（一页全超则封顶 100，角标 99+ 兜底）
     const maxId = Number(msg && msg.ordersMaxId) || 0;
     if (maxId > 0) {
-      await tryFetch('orders', '/api/pt-card/market/myorders', { pageNumber: 1, pageSize: 100 },
-        (r) => Array.isArray(r && r.data && r.data.data) ? r.data.data.filter((o) => Number(o.id) > maxId).length : 0);
+      // 拉最新一页顺手 mergeOrders 增量入库（幂等去重）——探测数据不再用完即弃：
+      // 刷新页面后 ordersAll 即最新（侧栏计数立即准确；进 view 若冷却 skip 也显示新数据）。
+      // 角标 = merge 的 added 数（新记录数），与原"数 id>maxId"语义一致（返回序 id 降序，新增必在首页）。
+      try {
+        const r = await mtFetch('/api/pt-card/market/myorders', { pageNumber: 1, pageSize: 100 });
+        const items = (r && r.data && Array.isArray(r.data.data)) ? r.data.data : [];
+        const rr = await mergeOrders(items, Number(r && r.data && r.data.total) || 0);
+        totals.orders = (rr && rr.added) || 0;   // mergeOrders 自身 update 写库（幂等去重），无需重复写
+      } catch (e) { totals.orders = null; }
+      await randSleep(400, 900);
     } else totals.orders = 0;   // 本地无挂单记录（首用）：不产角标
     await tryFetch('invNormal', '/api/pt-card/inventory', { pageNumber: 1, pageSize: 10 }, pickTotal);
     await tryFetch('invMech', '/api/pt-card/mechanism/list', {}, (r) => Array.isArray(r && r.data) ? r.data.filter((x) => !x || !x.usedAt).length : 0);  // 未使用口径（对齐本地基准）
