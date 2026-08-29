@@ -743,7 +743,7 @@ function renderCardBook() {
   const box = $('cardBookView');
   if (!box) return;
   const _mainEl2 = document.querySelector('.main');
-  const _keepScroll = (_mainEl2 && view === 'cardBook') ? _mainEl2.scrollTop : null;   // 锁操作等触发的重绘保持滚动位置（曾跳顶）
+  const _keepScroll = (_mainEl2 && view === 'cardBook' && !_viewEntering) ? _mainEl2.scrollTop : null;   // 数据更新重绘保位（曾跳顶）；切换进入不保位（防记录上一 view 残留位置）
   const arr = computeCardBook();
   // 数据签名：结构未变不重建（SSE 高频 patch 曾致 DOM/img 全量反复重建 → 解码内存峰值叠高、页面卡）。
   // sig 拼入当前语言：setLang→renderAll 时语言变化要穿透签名重建（图例等 t() 固化文案才能实时切换）
@@ -804,9 +804,11 @@ function triggerMarketRefresh(force) {
 }
 
 var viewScrollPos = {};   // 每 view 独立滚动位置（曾共享 .main 滚动——切 view 位置串扰，一直以来的 bug）
+var _viewEntering = false;   // 切换进入标志：renderCardBook 的"保滚动"在此期间不生效——曾记录到上一 view 残留 scrollTop 致首进卡册"默认往下滑一点"
 function toggleView(v) {
   var _mainEl = document.querySelector('.main');
   if (_mainEl && view) viewScrollPos[view] = _mainEl.scrollTop;   // 离开当前 view：保存
+  _viewEntering = true;
   view = v;
   if (v !== 'inventory') redeemMode = null;   // 切出持有 view：退出兑换子模式
   if (viewBadges[v] !== undefined && viewBadges[v] > 0) { viewBadges[v] = 0; renderBadges(); }  // 进 view 清零持久角标（已看=已知悉）
@@ -817,6 +819,7 @@ function toggleView(v) {
   const grid = $('grid');
   if (grid) grid._sig = null;
   renderLive();
+  _viewEntering = false;   // renderLive（含 renderCardBook 保位判断）完成，退出进入态
   // 回到市场视图时刷新：有定向 tag → runSearch；否则 → triggerRefreshRound（统一入口：节流+按钮 spin 同步）
   if (v === 'market') triggerMarketRefresh();
   // 移动端抽屉：切 view 后自动关闭
