@@ -155,8 +155,8 @@ function mergeObj(a, b) {
 // ============ 侧栏变化角标 ============
 // 持久款：打开页面轻量探测（PROBE，只拿 total）与本地差值 → 进对应 view 清零；
 // 5s 闪现款：正看某 view 时该 view 数据变化（点按钮刷新/操作后 SSE 推送）→ 同款角标自动消失。
-var viewBadges = { trades: 0, orders: 0, inventory: 0, marketData: 0 };   // 掉落无轻量 total 接口，不做
-var BADGE_BTN = { trades: 'buyHistoryBtn', orders: 'ordersBtn', inventory: 'inventoryBtn', marketData: 'marketDataBtn' };
+var viewBadges = { trades: 0, orders: 0, inventory: 0, marketData: 0, dropStats: 0 };   // 掉落走 feed 一页探测+入库（v1.5.1 补）
+var BADGE_BTN = { trades: 'buyHistoryBtn', orders: 'ordersBtn', inventory: 'inventoryBtn', marketData: 'marketDataBtn', dropStats: 'dropStatsBtn' };
 
 function badgeSnapshot() {
   return {
@@ -211,6 +211,7 @@ function probeAndBadge() {
       notifyViewDelta('inventory', dN + dM);                                                        // 持有增减都算（普通+机制合计）
     }
     if (tt.marketData != null) notifyViewDelta('marketData', tt.marketData - snap.marketData);       // 市场数据只会增
+    if (tt.dropStats != null && tt.dropStats > 0) notifyViewDelta('dropStats', tt.dropStats);        // 掉落：探测层已算新增数（feed 一页 merge 的 added），>0 即角标
   }).catch(() => {});
 }
 

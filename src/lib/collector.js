@@ -493,6 +493,13 @@ export function createCollector({ state, mteam, normalizers, stats }) {
     await tryFetch('invNormal', '/api/pt-card/inventory', { pageNumber: 1, pageSize: 10 }, pickTotal);
     await tryFetch('invMech', '/api/pt-card/mechanism/list', {}, (r) => Array.isArray(r && r.data) ? r.data.filter((x) => !x || !x.usedAt).length : 0);  // 未使用口径（对齐本地基准）
     await tryFetch('marketData', '/api/pt-card/market/tradeHistory', { pageNumber: 1, pageSize: 10 }, pickTotal);
+    // 掉落：feed 只返回最新 25 条无 total——拉一页 mergeDropFeed 顺手入库（与 orders 同思路），added 数即角标。
+    // 25 条上限：单次新增 >25 时角标封顶 25（日常掉落频率远低于此，够用）
+    try {
+      const rf = await mtFetch('/api/pt-card/feed', { pageNumber: 1, pageSize: 25 });
+      const fitems = (rf && rf.data && Array.isArray(rf.data.data)) ? rf.data.data : [];
+      totals.dropStats = await mergeDropFeed(fitems) || 0;
+    } catch (e) { totals.dropStats = null; }
     _lastProbeTotals = totals;
     return { ok: true, totals };
   }
