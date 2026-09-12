@@ -335,8 +335,12 @@ function _peopleRanks(subset) {
     }
     if (tr.sellerId != null) {
       const sid = String(tr.sellerId);
-      if (!sellerMap[sid]) sellerMap[sid] = { id: sid, trades: 0, volume: 0 };
+      if (!sellerMap[sid]) sellerMap[sid] = { id: sid, trades: 0, volume: 0, volumeNet: 0 };
       sellerMap[sid].trades++; sellerMap[sid].volume += pv;
+      // volumeNet = 扣税后实收（fee 有值用 fee；缺失兜底按 挂单价/1.05 口径，同 netOf）——供「我的市场画像」净盈亏用，
+      // 与交易记录/用户画像（mytrades 扣税口径）统一；volume 保持市场成交额语义（排行/份额用）
+      const fv = (tr.fee != null && tr.fee !== '') ? Number(tr.fee) : NaN;
+      sellerMap[sid].volumeNet += Number.isFinite(fv) ? (pv - fv) : pv / 1.05;
     }
   }
   const buyerArr = Object.keys(buyerMap).map(function (k) { const b = buyerMap[k]; b.avgPrice = b.trades ? b.volume / b.trades : 0; return b; });

@@ -1926,7 +1926,9 @@ body.no-token .layout > main { display: none !important; }
   background: color-mix(in srgb, var(--bg) 8%, transparent);
   backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(2px);
   border-radius: 10px;
+  pointer-events: none;   /* 遮罩不吞点击：询价/右上角详情跳转穿透可点（卖出按钮已另行禁用） */
 }
+.inventory-card.manual-locked .lock-overlay .unlock-btn { pointer-events: auto; }
 .inventory-card.manual-locked .unlock-btn {
   display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px;

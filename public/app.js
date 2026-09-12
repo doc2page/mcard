@@ -838,7 +838,8 @@ function currentPortrait() {
   return computePortrait({
     bonus: p.bonus, finalBs: bn.finalBs,
     buySum: tr.buy.sum, sellSum: tr.sell.sum, buyCount: tr.buy.count, sellCount: tr.sell.count,
-    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore,
+    redeemIncome: tr.voucherIncome || 0,   // 魔力符券收益也计入净支出扣减（玩卡综合口径）
+    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore, dropCount: ds.totalCards || 0,
     cardCount: cl.count, cardAvg: cl.avg, cardMax: cl.max, cardMin: cl.min,
   });
 }
@@ -848,7 +849,7 @@ function portraitGambleNick(pt) {
 }
 // 角色称号（i18n 拼接）
 function portraitNickOf(pt) {
-  return t('portrait.nick', { mod: t('portrait.trendMod.' + pt.trend.key), tier: t('portrait.wealth.' + pt.wealth.key), luck: t('portrait.luck.' + pt.luckKey), gamble: portraitGambleNick(pt) });
+  return t('portrait.nick', { mod: t('portrait.trendMod.' + pt.trend.modKey), tier: t('portrait.wealth.' + pt.wealth.key), luck: t('portrait.luck.' + pt.luckKey), gamble: portraitGambleNick(pt) });
 }
 
 // 个人资料卡（「我的」面板：身份头 + 魔力 hero + 数据行）
@@ -1422,7 +1423,10 @@ function computeTradeStats(list) {
   stats.boughtFrom = sellers.size;
   stats.buy.avg = stats.buy.count ? stats.buy.sum / stats.buy.count : 0;
   stats.sell.avg = stats.sell.count ? stats.sell.sum / stats.sell.count : 0;
-  stats.net = stats.buy.sum - stats.sell.sum;
+  // 净额再减魔力符券收益（付费开卡 bonus 合计 = cardLogSummary.sum，无记录为 0 不影响）——「玩卡综合净收支」口径，与用户画像/市场画像统一
+  const voucherIncome = (state.cardLogSummary && Number(state.cardLogSummary.sum)) || 0;
+  stats.voucherIncome = voucherIncome;
+  stats.net = stats.buy.sum - stats.sell.sum - voucherIncome;
   let maxDaySpend = null, maxDaySpendDate = '';
   for (const d in dayBuy) { if (maxDaySpend == null || dayBuy[d] > maxDaySpend) { maxDaySpend = dayBuy[d]; maxDaySpendDate = d; } }
   stats.maxDaySpend = maxDaySpend;
@@ -1501,7 +1505,7 @@ function renderTradeStats() {
   append(box, statGroup('money', '💰', t('trade.statGroupMoney'),
     buyCountMetric,
     sellCountMetric,
-    metric(netLabel, netNode, null, 'metric-net metric-vcenter metric-' + netDir),
+    metric(netLabel, netNode, s.voucherIncome > 0 ? el('span', { cls: 'metric-sub', text: t('trade.voucherDeduct', { v: fmtK(s.voucherIncome) }) }) : null, 'metric-net metric-vcenter metric-' + netDir),
     metric(t('trade.metricMaxDaySpend'), spendVal, spendSub, 'metric-spend metric-vcenter'),
   ));
 
@@ -2513,17 +2517,18 @@ function renderPortraitView() {
   const pt = computePortrait({
     bonus: p.bonus, finalBs: bn.finalBs,
     buySum: tr.buy.sum, sellSum: tr.sell.sum, buyCount: tr.buy.count, sellCount: tr.sell.count,
-    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore,
+    redeemIncome: tr.voucherIncome || 0,   // 魔力符券收益也计入净支出扣减（玩卡综合口径）
+    spanDays: Math.max(1, Math.ceil((Date.now() - Date.parse(PORTRAIT_SPAN_SINCE)) / 86400000)), rarityScore: ds.rarityScore, dropCount: ds.totalCards || 0,
     cardCount: cl.count, cardAvg: cl.avg, cardMax: cl.max, cardMin: cl.min,
   });
 
   // 文案查 i18n（portrait.js 只产 key + 原始值，文案全走 locales）
   const tierL = t('portrait.wealth.' + pt.wealth.key);
-  const luckL = t('portrait.luck.' + pt.luckKey);
+  const luckL = t('portrait.luck.' + pt.luckKey);   // luck.none='—'（零掉落不评价）
   const gambleL = t('portrait.gamble.' + pt.gambleKey);
   const styleL = t('portrait.style.' + pt.styleKey);
   const mech = t('portrait.' + pt.mechKey, { n: Math.round(pt.dayIncome) });
-  const nickname = t('portrait.nick', { mod: t('portrait.trendMod.' + pt.trend.key), tier: tierL, luck: luckL, gamble: portraitGambleNick(pt) });
+  const nickname = t('portrait.nick', { mod: t('portrait.trendMod.' + pt.trend.modKey), tier: tierL, luck: luckL, gamble: portraitGambleNick(pt) });
   const identity = t('portrait.' + pt.narrativeIdKey, { tier: tierL, mech: mech });
   const spending = t('portrait.' + pt.spendingKey, { style: styleL, n: Math.round(pt.daySpend), days: (pt.trend.daysLeft != null ? pt.trend.daysLeft : '∞') });
   const luckLine = t('portrait.' + pt.luckLineKey, { luck: luckL, gamble: gambleL });
@@ -2723,13 +2728,14 @@ function buildMdTabs() {
 function buildTradeView(hist) {
   const wrap = el('div', { cls: 'md-trade-view' });
   const filtered = filterTrades(hist, mdTradeFilter, mdTradeSearch, mdTradeDir);
-  wrap.appendChild(buildTradeFilter(hist, filtered.length, hist.length));
+  const vol = filtered.reduce(function (a, x) { return a + (Number(x.price) || 0); }, 0);   // 匹配总成交额（药丸展示）
+  wrap.appendChild(buildTradeFilter(hist, filtered.length, hist.length, vol));
   wrap.appendChild(buildTradeList(filtered, filtered.length));
   return wrap;
 }
 
 // 交易记录筛选条：rarity/provenance/title chip（绑 mdTradeFilter）+ 日期 + 搜索框 + 方向 chip + 匹配药丸/清除
-function buildTradeFilter(hist, matchCount, total) {
+function buildTradeFilter(hist, matchCount, total, matchVolume) {
   const wrap = el('div', { cls: 'market-filter md-trade-filter' });
   const facets = extractFacets(hist);
   const rarities = (typeof RARITIES !== 'undefined' && RARITIES) || ['UR', 'SSR', 'SR', 'R', 'N'];
@@ -2785,7 +2791,7 @@ function buildTradeFilter(hist, matchCount, total) {
   // 匹配药丸 + 清除（仅有筛选/搜索/方向非默认时显示）
   if (mdTradeFilter || mdTradeSearch || mdTradeDir !== 'both') {
     const actionsRow = el('div', { cls: 'mf-row mf-actions' });
-    const pill = el('span', { cls: 'md-pill', text: t('marketData.matchCount', { n: matchCount, m: total }) });
+    const pill = el('span', { cls: 'md-pill', text: t('marketData.matchCount', { n: matchCount, m: total, vol: fmtNum(Math.round(matchVolume || 0)), avg: fmtNum(Math.round(matchCount ? (matchVolume || 0) / matchCount : 0)) }) });
     const clr = el('button', { cls: 'seg-btn mini', text: t('search.clear'), attrs: { type: 'button' } });
     clr.onclick = function () { mdTradeFilter = null; mdTradeSearch = ''; mdTradeDir = 'both'; mdListPage = 1; renderMarketData(); };
     append(actionsRow, pill, clr);
@@ -3582,7 +3588,10 @@ function buildMyProfile(sum) {
   box.appendChild(head);
   // 2. 净盈亏突出大字（同时有买+卖才显；居中，涨绿 var(--up)/跌红 var(--down)）
   if (buyer && seller) {
-    const net = Number(seller.volume || 0) - Number(buyer.volume || 0);
+    // 卖出用扣税后实收 volumeNet（与交易记录/用户画像的 netOf 口径统一；volume 是含税成交额，排行/份额用）；
+    // 券收益是收入，净盈亏口径（卖−买）应加上（与净支出侧「减去」方向相反，数学上同为回血）
+    const voucherIncome = (state.cardLogSummary && Number(state.cardLogSummary.sum)) || 0;
+    const net = Number(seller.volumeNet != null ? seller.volumeNet : (seller.volume || 0)) - Number(buyer.volume || 0) + voucherIncome;
     const nb = el('div', { cls: 'mp-net ' + (net >= 0 ? 'up' : 'down') });
     append(nb,
       el('span', { cls: 'mp-net-l', text: t('marketData.netPnl') }),
@@ -4095,14 +4104,14 @@ function openSellDialog(it) {
     if (!Number.isFinite(netPrice) || netPrice <= 0) { showToast(t('inv.sellInvalidPrice'), 'error'); return; }
     const origText = sellBtn.textContent;
     sellBtn.dataset.busy = '1'; sellBtn.disabled = true; sellBtn.textContent = '…';
-    await send({ type: 'LOAD_ORDERS' });
-    const st = await send({ type: 'GET_STATE' });
-    if (((st && st.ordersAll) || []).filter((o) => o.status === 'open').length >= 50) {
+    // 50 上限用本地 state.ordersAll 检查（与批量 runBatchOp 同口径）——原先实时 LOAD_ORDERS+GET_STATE 两个前置请求让确认卡 1~3s；
+    // 极端漏检（他处挂满 50 本地未同步）由后端拒绝 + 失败 toast 兜底，行为与批量一致
+    if ((state.ordersAll || []).filter((o) => o.status === 'open').length >= 50) {
       sellBtn.dataset.busy = ''; sellBtn.disabled = false; sellBtn.textContent = origText;
       showToast(t('inv.sellOrderFull'), 'error'); return;
     }
-    const r = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: netPrice });
-    if (r && r.ok) { showToast(t('inv.sellSuccessToast', { price: netPrice }), 'success'); close(); }
+    const r = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: netPrice, skipRefresh: true });  // skipRefresh：后端不等 M-TEAM 全量刷新即返回（与批量同模式），成功后前端非阻塞补刷
+    if (r && r.ok) { showToast(t('inv.sellSuccessToast', { price: netPrice }), 'success'); close(); send({ type: 'LOAD_ORDERS' }); send({ type: 'LOAD_INVENTORY' }); }
     else { sellBtn.dataset.busy = ''; sellBtn.disabled = false; sellBtn.textContent = origText; showToast(t('inv.sellFailedToast'), 'error'); }
   };
 }
@@ -4609,14 +4618,18 @@ function marketSelectedItems() {
   return out;
 }
 
-// 卖出按钮：打开卖出模态窗（挂卖按钮内集成校验/50检查/sell + 状态）；交易锁定期内禁用变灰
+// 卖出按钮：打开卖出模态窗（挂卖按钮内集成校验/50检查/sell + 状态）；交易锁定期/手动锁定禁用变灰
 function buildSellBtn(it) {
   const lockUntil = parseMtTime(it.tradeLockUntil);
   const locked = Number.isFinite(lockUntil) && lockUntil > Date.now();
+  const userLocked = isUserLocked(it);   // 手动锁：遮罩已 pointer-events:none 穿透（询价/详情跳转可点），卖出须显式禁用防误卖
   const btn = el('button', { cls: 'inv-sell-btn', attrs: { type: 'button' }, text: t('inv.sell') });
   if (locked) {
     btn.disabled = true;
     if (it.tradeLockUntil) btn.title = t('inv.locksUntil', { time: it.tradeLockUntil });
+  } else if (userLocked) {
+    btn.disabled = true;
+    btn.title = t('inv.manualLockedNoSell');
   } else {
     btn.onclick = (e) => { e.stopPropagation(); if (!btn.dataset.busy) openSellDialog(it); };
   }
@@ -5382,7 +5395,8 @@ async function onOrderModify(it) {
     option2Text: t('order.modifyPrice'), option2Variant: 'primary',
   });
   if (choice === '1') {
-    const r = await send({ type: 'CANCEL_ORDER', orderId: it.id });
+    const r = await send({ type: 'CANCEL_ORDER', orderId: it.id, skipRefresh: true });  // skipRefresh：不等后端同步刷新，成功后前端非阻塞补刷
+    if (r && r.ok) { send({ type: 'LOAD_ORDERS' }); send({ type: 'LOAD_INVENTORY' }); }
     showToast(r && r.ok ? t('order.cancelSuccess') : t('order.cancelFailed'), r && r.ok ? 'success' : 'error');
   } else if (choice === '2') {
     // 改价按挂单方向分流：sell=撤+挂卖（净卖价）；buy=撤+纯限价挂买（RELIST_BUY，open 即挂上不撤）。
@@ -5390,17 +5404,17 @@ async function onOrderModify(it) {
     const isBuyOrder = it.side === 'buy';
     const runModify = async (newPrice) => {
       if (!(newPrice > 0)) { showToast(t('order.modifyFailed'), 'error'); return; }
-      const cr = await send({ type: 'CANCEL_ORDER', orderId: it.id });
+      const cr = await send({ type: 'CANCEL_ORDER', orderId: it.id, skipRefresh: true });  // skipRefresh：改价撤挂不等后端刷新
       if (!cr || !cr.ok) { showToast(t('order.cancelFailed'), 'error'); return; }
       if (isBuyOrder) {
         const br = await send({ type: 'RELIST_BUY', variant: { filmId: it.filmId, rarity: it.rarity || '', provenance: it.provenance }, price: newPrice });
         if (br && br.ok) {
-          await send({ type: 'LOAD_ORDERS' });
+          send({ type: 'LOAD_ORDERS' });
           showToast(br.filled ? t('order.relistBuyFilled') : t('order.relistBuyOk'), 'success');
         } else showToast(t('order.buyModifyFailed'), 'error');
       } else {
-        const sr = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: newPrice });
-        if (sr && sr.ok) { await send({ type: 'LOAD_ORDERS' }); showToast(t('order.modifySuccess'), 'success'); }
+        const sr = await send({ type: 'SELL_CARD', cardId: it.cardId, isMech: isMechCard(it), netPrice: newPrice, skipRefresh: true });
+        if (sr && sr.ok) { send({ type: 'LOAD_ORDERS' }); send({ type: 'LOAD_INVENTORY' }); showToast(t('order.modifySuccess'), 'success'); }
         else showToast(t('order.modifyFailed'), 'error');
       }
     };
@@ -5452,11 +5466,15 @@ async function onBuy(it) {
   try {
     const _rar = (it.rarity || (it.variant || {}).rarity || '');
     const _monLimit = buyLimitOf(name, _rar);   // 定向模式所见即所得（词条价门），常规模式全局阈值
-    resp = await send({ type: 'BUY_CARD', variant: it.variant, expectPrice: Number(price), filmName: name, poster: it.poster || '', rarity: _rar, title: (it.title || ''), maxPrice: _monLimit });
+    resp = await send({ type: 'BUY_CARD', variant: it.variant, expectPrice: Number(price), filmName: name, poster: it.poster || '', rarity: _rar, title: (it.title || ''), maxPrice: _monLimit, skipRefresh: true });  // skipRefresh：与批量同模式，成交即返回
   } catch (e) {
     resp = { ok: false, reason: 'error' };
   }
   dismissToast(loading);
+  // 交易后统一非阻塞刷新（成功/失败都可能影响数据：卡易主进 trades、失败核价可能残留买单）：市场 + 交易记录 + 挂单，SSE 推回自动更新界面
+  triggerMarketRefresh(true);
+  send({ type: 'LOAD_TRADES' });
+  send({ type: 'LOAD_ORDERS' });
   if (resp && resp.ok && resp.confirmed) {
     showToast(t('trade.buySuccessToast', { name: name, price: resp.price }), 'success');
   } else if (resp && resp.ok && !resp.confirmed) {

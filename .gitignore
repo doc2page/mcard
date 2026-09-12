@@ -164,3 +164,4 @@ tests/
 # 先重新包含目录本身，git 才会下钻；再重新包含其内容。
 !src/lib/
 !src/lib/**
+celebration/

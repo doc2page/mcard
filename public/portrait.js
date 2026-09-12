@@ -42,7 +42,8 @@ function _logNorm(v, lo, hi) {
 
 // 各维度档位 key（文案走 locales）
 function tradeStyleKey(b, s) { return (b + s === 0) ? 'newbie' : (b >= s * 2 ? 'hoard' : (s > b ? 'flip' : 'turn')); }
-function luckKey(r) { return r >= 15 ? 'lucky' : (r >= 6 ? 'normal' : 'unlucky'); }
+// 零掉落（count=0）不评价运气——没掉过卡不等于非酋；掉过但分低才是非酋
+function luckKey(r, count) { return (!count) ? 'none' : (r >= 15 ? 'lucky' : (r >= 6 ? 'normal' : 'unlucky')); }
 // 符券博弈：张数归一（100张封顶）+ 分档（count=赌性, avg=欧皇度, range=极差波动；波动优先于均值）
 function _countNorm(c) { const x = Number(c) || 0; return x <= 0 ? 0 : Math.min(1, Math.log10(x) / 2); }
 function gambleKey(c, a, rg) {
@@ -70,13 +71,14 @@ function computePortrait(a) {
   const buyCount = Number(a.buyCount) || 0, sellCount = Number(a.sellCount) || 0;
   const spanDays = Number(a.spanDays) || 0;
   const rarityScore = Number(a.rarityScore) || 0;
+  const dropCount = Number(a.dropCount) || 0;
   const cardCount = Number(a.cardCount) || 0;
   const cardAvg = Number(a.cardAvg) || 0;
   const cardRange = Math.max(0, (Number(a.cardMax) || 0) - (Number(a.cardMin) || 0));
 
   const wt = wealthTier(bonus);
   const dayIncome = finalBs * 24;                        // 日产能（每小时×24）
-  const netSpend = buySum - sellSum;                     // 净支出（正=买>卖）
+  const netSpend = buySum - sellSum - (Number(a.redeemIncome) || 0);   // 净支出（正=买>卖；再扣魔力符券收益=玩卡综合口径，与交易记录/市场画像统一）
   // spanDays = 统计窗口总历时（since~今天，含没交易日）；日均支出 = 净支出 / 总历时，不外推放大
   const daySpend = spanDays > 0 ? Math.max(0, netSpend) / spanDays : Math.max(0, netSpend);
 
@@ -91,6 +93,8 @@ function computePortrait(a) {
     daysLeft = bonus > 0 ? Math.floor(bonus / deficit) : 0;
     trendKey = daysLeft >= 90 ? 'drain' : 'overdraw';   // 还能撑≥90天为消耗，否则透支
   }
+  // 修饰词细分：drain 档 ≥365 天家底厚用温和词（细水长流），90~365 天才配「坐吃山空」——1201 天叫坐吃山空失真
+  const trendModKey = trendKey === 'drain' ? (daysLeft >= 365 ? 'drainLong' : 'drain') : trendKey;
 
   // 五维雷达（0-1）
   // 博弈维 = 赌性0.5 + 欧皇0.25 + 波动0.25（张数/均值/极差 各自归一）；未开卡→0
@@ -110,7 +114,7 @@ function computePortrait(a) {
     { key: 'wealth', icon: '💰', value: Math.round(bonus).toLocaleString(), unit: '', evalKey: wt.tier.key, ratio: radar.wealth },
     { key: 'income', icon: '⚙️', value: Math.round(dayIncome), unit: 'unitDay', evalKey: incomeKey(finalBs), ratio: radar.income },
     { key: 'spend', icon: '💸', value: Math.round(daySpend), unit: 'unitDay', evalKey: spendKey(daySpend), ratio: radar.spend },
-    { key: 'luck', icon: '🍀', value: rarityScore.toFixed(1), unit: 'unitScore', evalKey: luckKey(rarityScore), ratio: radar.luck },
+    { key: 'luck', icon: '🍀', value: rarityScore.toFixed(1), unit: 'unitScore', evalKey: luckKey(rarityScore, dropCount), ratio: radar.luck },
     { key: 'gamble', icon: '🎰', value: String(cardCount), unit: 'unitCard', evalKey: gambleKey(cardCount, cardAvg, cardRange), ratio: radar.gamble },
   ];
 
@@ -121,9 +125,9 @@ function computePortrait(a) {
 
   return {
     wealth: { key: wt.tier.key, bonus: bonus, index: wt.index, color: wt.tier.color },
-    trend: { key: trendKey, daysLeft: daysLeft },
+    trend: { key: trendKey, modKey: trendModKey, daysLeft: daysLeft },
     styleKey: tradeStyleKey(buyCount, sellCount),
-    luckKey: luckKey(rarityScore),
+    luckKey: luckKey(rarityScore, dropCount),
     gambleKey: gambleKey(cardCount, cardAvg, cardRange),
     radar: radar,
     dims: dims,
