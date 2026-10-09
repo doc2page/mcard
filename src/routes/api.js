@@ -55,6 +55,7 @@ export function createApiRouter({ state, collector, trader, mteam, version }) {
       if (action === 'sell') return res.json(await trader.sellCard(req.body));
       if (action === 'cancel') return res.json(await trader.cancelOrder(req.body));
       if (action === 'relistBuy') return res.json(await trader.relistBuy(req.body));
+      if (action === 'useMech') return res.json(await trader.useMechanism(req.body));
       res.json({ ok: false, reason: 'unknown_action' });
     } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
   });

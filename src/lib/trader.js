@@ -142,6 +142,21 @@ export function createTrader({ state, mteam, collector }) {
     return { ok: true };
   }
 
+  // 使用机制符（开魔力符券等）：POST /pt-card/mechanism/use {cardId}，data.manaGained 为开出魔力。
+  // 纯原语：无同步刷新（前端「搏一把」循环调用，整轮后统一刷持有）。
+  async function useMechanism(msg) {
+    const cardId = Number(msg.cardId);
+    if (!Number.isFinite(cardId) || cardId <= 0) return { ok: false, reason: 'use_failed' };
+    let json;
+    try {
+      json = await mtFetch('/api/pt-card/mechanism/use', { cardId });
+    } catch (e) {
+      return { ok: false, reason: 'use_failed' };
+    }
+    if (!json || String(json.code) !== '0' || !json.data) return { ok: false, reason: 'use_failed' };
+    return { ok: true, manaGained: Number(json.data.manaGained) || 0, effect: json.data.effect || '' };
+  }
+
   // 普通卡兑换机制卡：恰好 10 张同稀有度普通卡 → 1 张机制符。recipeId 1=魔力符(N) 2=置顶免费符(SR) 3=VIP符(UR)。
   // 后端双重校验（前端已拦，防前端状态过期/绕过）：10 个不同 cardId + state.inventory 回查均为普通卡、稀有度匹配、未手动锁定。
   // 挂单卡不在 inventory（回查 miss 即拒）；冷却卡（tradeLockUntil）可兑，官方允许。
@@ -195,5 +210,5 @@ export function createTrader({ state, mteam, collector }) {
     return { ok: true, filled: String(json.data.status) === 'filled' };
   }
 
-  return { buyCard, sellCard, cancelOrder, redemption, relistBuy };
+  return { buyCard, sellCard, cancelOrder, useMechanism, redemption, relistBuy };
 }

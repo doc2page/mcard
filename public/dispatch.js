@@ -19,6 +19,7 @@ export function dispatch(msg) {
     case 'BUY_CARD':         return { method: 'POST', path: '/api/trade', body: { action: 'buy', variant: msg.variant, expectPrice: msg.expectPrice, maxPrice: msg.maxPrice, skipRefresh: msg.skipRefresh } };
     case 'SELL_CARD':        return { method: 'POST', path: '/api/trade', body: { action: 'sell', cardId: msg.cardId, isMech: msg.isMech, netPrice: msg.netPrice, skipRefresh: msg.skipRefresh } };
     case 'CANCEL_ORDER':     return { method: 'POST', path: '/api/trade', body: { action: 'cancel', orderId: msg.orderId, skipRefresh: msg.skipRefresh } };
+    case 'USE_MECH':          return { method: 'POST', path: '/api/trade', body: { action: 'useMech', cardId: msg.cardId } };
     case 'REDEEM':           return { method: 'POST', path: '/api/redemption', body: { cardIds: msg.cardIds, recipeId: msg.recipeId } };
     case 'PROBE':            return { method: 'POST', path: '/api/totals', body: { ordersMaxId: msg.ordersMaxId } };
     case 'SET_CONFIG':       return { method: 'POST', path: '/api/setconfig', body: msg.config };

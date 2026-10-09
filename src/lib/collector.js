@@ -236,11 +236,13 @@ export function createCollector({ state, mteam, normalizers, stats }) {
   // ============ 挂单记录：增量合并进 ordersAll（按记录id去重，status变化更新）============
   // 增量合并挂单记录进 ordersAll：按记录 id 去重；新 id 追加，已有 id 更新可变字段(status/price/lastModifiedDate)。
   // cardId 是卡片身份(同 cardId 多条记录 = 该卡挂单轨迹)，记录 id 是单次挂单号。
+  // addedOpen = 新增记录中 status=open 的数量——变化角标口径：买单撤单链路（吃单失败挂单即撤/官网买单成交撤销）
+  // 每笔都 append 一条 cancelled 新记录，在「当前挂单」view 不可见，计入角标会反复误亮；只数 open 才与所见一致。
   async function mergeOrders(items, total) {
     const st = await state.getState();
     const exist = new Map((st.ordersAll || []).map((o) => [String(o.id), o]));
-    if (!Array.isArray(items) || !items.length) return { added: 0, updated: 0, total: exist.size };
-    let added = 0, updated = 0;
+    if (!Array.isArray(items) || !items.length) return { added: 0, updated: 0, addedOpen: 0, total: exist.size };
+    let added = 0, updated = 0, addedOpen = 0;
     for (const it of items) {
       if (!it || it.id == null) continue;
       const id = String(it.id);
@@ -253,15 +255,15 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         createdDate: it.createdDate || '', lastModifiedDate: it.lastModifiedDate || '',
       };
       const cur = exist.get(id);
-      if (!cur) { exist.set(id, norm); added++; }
+      if (!cur) { exist.set(id, norm); added++; if (norm.status === 'open') addedOpen++; }
       else if (cur.status !== norm.status || cur.price !== norm.price || cur.lastModifiedDate !== norm.lastModifiedDate) {
         exist.set(id, Object.assign({}, cur, { status: norm.status, price: norm.price, lastModifiedDate: norm.lastModifiedDate }));
         updated++;
       }
     }
-    if (!added && !updated) return { added: 0, updated: 0, total: exist.size };
+    if (!added && !updated) return { added: 0, updated: 0, addedOpen: 0, total: exist.size };
     await state.update({ ordersAll: Array.from(exist.values()), ordersTotal: total || exist.size });
-    return { added, updated, total: exist.size };
+    return { added, updated, addedOpen, total: exist.size };
   }
 
   // myorders 每次翻页拿全（pageSize=200）+ profile。
@@ -486,7 +488,7 @@ export function createCollector({ state, mteam, normalizers, stats }) {
         const r = await mtFetch('/api/pt-card/market/myorders', { pageNumber: 1, pageSize: 100 });
         const items = (r && r.data && Array.isArray(r.data.data)) ? r.data.data : [];
         const rr = await mergeOrders(items, Number(r && r.data && r.data.total) || 0);
-        totals.orders = (rr && rr.added) || 0;   // mergeOrders 自身 update 写库（幂等去重），无需重复写
+        totals.orders = (rr && rr.addedOpen) || 0;   // 角标只数新增 open 记录（cancelled/filled 新记录照常入库但不亮——view 里看不到它们，见 mergeOrders 注释）
       } catch (e) { totals.orders = null; }
       await randSleep(400, 900);
     } else totals.orders = 0;   // 本地无挂单记录（首用）：不产角标

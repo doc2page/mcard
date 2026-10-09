@@ -1809,6 +1809,7 @@ function showOrderHistory(cardId, head) {
 function renderInventory() {
   buildInventoryChips();
   renderInventoryStats();
+  updateGambleBtn();
   const isc = $('inventorySearch');
   if (isc) isc.classList.toggle('redeem-lock-filter', !!redeemMode);  // 兑换模式：稀有度/来源筛选灰显锁定（称号可用），CSS 按 data-fgroup 区分
   const grid = $('grid');
@@ -1846,6 +1847,164 @@ function renderInventory() {
   }
   list.forEach((it, i) => grid.appendChild(buildInventoryCard(it, Math.min(i, 40) * 25)));
   updateRedeemLockVisual();   // 兑换模式：选满 10 后未选中卡灰显（进入模式/自动选/清选后重绘时机统一在此刷新）
+}
+
+// ============ 搏一把：批量开魔力符券（随机 1 / 随机 N / 全部；冷却中的卡优先开）============
+function updateGambleBtn() {
+  const gBtn = $('gambleBtn');
+  if (!gBtn) return;
+  const hold = ((state && state.mechInventory) || []).filter((m) => m && m.type === 'mana_voucher' && !m.isUsed).length;
+  const on = hold > 0 && inventoryFilter && inventoryFilter.mechs && inventoryFilter.mechs.has('mana_voucher');
+  gBtn.style.display = on ? '' : 'none';
+  gBtn.textContent = '🎲 ' + t('inv.gamble');
+  gBtn.title = t('inv.gambleBtnTip', { n: hold });
+  gBtn.onclick = () => { if (!gBtn.dataset.busy) openGambleModal(); };
+}
+
+function openGambleModal() {
+  const now = Date.now();
+  const pool = ((state && state.mechInventory) || []).filter((m) => m && m.type === 'mana_voucher' && !m.isUsed);
+  if (!pool.length) { showToast(t('inv.gambleNoHold'), 'error'); return; }
+  const isCooled = (m) => { const lu = parseMtTime(m.tradeLockUntil); return Number.isFinite(lu) && lu > now; };
+  // 组内洗牌 + 冷却组在前：随机开时冷却卡先消耗（冷却卡不能挂单，留着无用）
+  const shuffle = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const tmp = a[i]; a[i] = a[j]; a[j] = tmp; } return a; };
+  const cooledN = pool.filter(isCooled).length;
+  const ordered = shuffle(pool.filter(isCooled)).concat(shuffle(pool.filter((m) => !isCooled(m))));
+
+  const mask = el('div', { cls: 'modal-mask' });
+  const box = el('div', { cls: 'modal gm-modal' });
+  const head = el('div', { cls: 'modal-head' });
+  append(head, el('div', { cls: 'modal-icon', text: '🎰' }), el('div', { cls: 'modal-title', text: t('inv.gambleTitle') }));
+  box.appendChild(head);
+  const body = el('div', { cls: 'modal-body' });
+  body.appendChild(el('div', { cls: 'panel-hint', text: t('inv.gambleHoldInfo', { n: pool.length, cooled: cooledN }) }));
+
+  // 模式三卡
+  let mode = 'one';
+  const modesRow = el('div', { cls: 'gm-modes' });
+  const nInput = el('input', { cls: 'modal-input gm-n', attrs: { type: 'number', min: '1', step: '1', inputmode: 'numeric' } });
+  nInput.value = '10';
+  const nWrap = el('div', { cls: 'gm-n-wrap' });
+  nWrap.style.display = 'none';
+  nWrap.appendChild(el('span', { cls: 'gm-n-lbl', text: t('inv.gambleNLabel') }));
+  nWrap.appendChild(nInput);
+  const mkMode = (key, label, sub) => {
+    const c = el('button', { cls: 'gm-mode' + (mode === key ? ' on' : ''), attrs: { type: 'button' } });
+    c.appendChild(el('div', { cls: 'gm-mode-l', text: label }));
+    if (sub) c.appendChild(el('div', { cls: 'gm-mode-s', text: sub }));
+    c.onclick = () => {
+      if (goBtn.dataset.busy) return;
+      mode = key;
+      modesRow.querySelectorAll('.gm-mode').forEach((x) => x.classList.remove('on'));
+      c.classList.add('on');
+      const showN = key === 'n';
+      nWrap.style.display = showN ? '' : 'none';
+    };
+    return c;
+  };
+  append(modesRow,
+    mkMode('one', t('inv.gambleModeOne'), ''),
+    mkMode('n', t('inv.gambleModeN'), ''),
+    mkMode('all', t('inv.gambleModeAll'), t('inv.gambleModeAllSub', { n: pool.length })));
+  body.appendChild(modesRow);
+  body.appendChild(nWrap);
+  box.appendChild(body);
+
+  // 执行 + 日志 + 结算
+  const logBox = el('div', { cls: 'gm-log' });
+  logBox.style.display = 'none';
+  const resultBox = el('div', { cls: 'gm-result' });
+  resultBox.style.display = 'none';
+  body.appendChild(logBox);
+  body.appendChild(resultBox);
+
+  const goBtn = el('button', { cls: 'btn gm-go', attrs: { type: 'button' }, text: '🎲 ' + t('inv.gambleGo') });
+  const closeBtn = el('button', { cls: 'btn ghost', attrs: { type: 'button' }, text: t('common.cancel') });
+  const actions = el('div', { cls: 'modal-actions' });
+  append(actions, closeBtn, goBtn);
+  box.appendChild(actions);
+  mask.appendChild(box);
+  document.body.appendChild(mask);
+  requestAnimationFrame(() => mask.classList.add('show'));
+
+  let closed = false, opened = 0, failedN = 0, gains = [];
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    mask.remove();
+    if (opened > 0) send({ type: 'LOAD_INVENTORY' });   // 开过至少一张：非阻塞刷新持有（券-N、魔力+），SSE 推回
+  };
+
+  goBtn.onclick = async () => {
+    if (goBtn.dataset.busy) return;
+    let n;
+    if (mode === 'one') n = 1;
+    else if (mode === 'all') n = pool.length;
+    else {
+      n = Math.floor(Number(nInput.value));
+      if (!Number.isFinite(n) || n <= 0) { showToast(t('inv.gambleInvalidN'), 'error'); return; }
+      if (n > pool.length) { showToast(t('inv.gambleOverN', { max: pool.length }), 'error'); return; }
+    }
+    const chosen = ordered.slice(0, n);
+    goBtn.dataset.busy = '1'; goBtn.disabled = true;
+    closeBtn.textContent = t('inv.gambleStop');
+    modesRow.querySelectorAll('.gm-mode, .gm-n, input').forEach((x) => { x.disabled = true; });
+    nInput.disabled = true;
+    logBox.style.display = '';
+    logBox.replaceChildren();
+    for (let i = 0; i < chosen.length; i++) {
+      if (closed) break;   // 中断：已开的保留
+      goBtn.textContent = (i) + '/' + chosen.length + ' …';
+      if (i > 0) await new Promise((r) => setTimeout(r, 400 + Math.floor(Math.random() * 500)));   // randSleep 400-900ms（反风控，同采集链路节奏；首张不等）
+      const row = el('div', { cls: 'gm-row' });
+      row.appendChild(el('span', { cls: 'gm-idx mono', text: '#' + (i + 1) }));
+      row.appendChild(el('span', { cls: 'gm-dots', text: '···' }));
+      logBox.appendChild(row);
+      logBox.scrollTop = logBox.scrollHeight;
+      let r;
+      try { r = await send({ type: 'USE_MECH', cardId: chosen[i].cardId }); }
+      catch (e) { r = null; }
+      if (closed) break;
+      if (r && r.ok) {
+        opened++; gains.push(r.manaGained || 0);
+        row.appendChild(el('span', { cls: 'gm-gain mono', text: '+' + fmtNum(r.manaGained || 0) }));
+      } else {
+        failedN++;
+        row.appendChild(el('span', { cls: 'gm-fail', text: '✕' }));
+      }
+      goBtn.textContent = (i + 1) + '/' + chosen.length;
+    }
+    // 结算
+    const total = gains.reduce((a, b) => a + b, 0);
+    const best = gains.length ? Math.max.apply(null, gains) : 0;
+    const avgNow = gains.length ? total / gains.length : 0;
+    const hist = (state.cardLogSummary && Number(state.cardLogSummary.avg)) || 0;
+    resultBox.style.display = '';
+    resultBox.replaceChildren();
+    const big = el('div', { cls: 'gm-total mono', text: '+' + fmtNum(total) });
+    resultBox.appendChild(big);
+    const meta = el('div', { cls: 'gm-meta' });
+    append(meta,
+      el('span', { text: t('inv.gambleBest', { v: fmtNum(best) }) }),
+      el('span', { text: t('inv.gambleAvg', { v: fmtNum(Math.round(avgNow)) }) }),
+      el('span', { text: t('inv.gambleOpened', { n: opened }) + (failedN ? ' · ' + t('inv.gambleFailed', { n: failedN }) : '') }));
+    resultBox.appendChild(meta);
+    if (hist > 0 && gains.length) {
+      const pct = Math.round((avgNow / hist - 1) * 100);
+      let key, cls;
+      if (pct > 0) { key = 'inv.gambleLucky'; cls = 'gm-verdict up'; }
+      else if (pct < 0) { key = 'inv.gambleUnlucky'; cls = 'gm-verdict down'; }
+      else { key = 'inv.gambleEven'; cls = 'gm-verdict'; }
+      resultBox.appendChild(el('div', { cls: cls, text: t(key, { pct: Math.abs(pct) }) }));
+    }
+    goBtn.textContent = '✓'; goBtn.disabled = false; goBtn.dataset.busy = ''; goBtn.style.display = 'none';
+    closeBtn.textContent = t('common.close');
+  };
+
+  const onKey = (e) => { if (e.key === 'Escape' && !goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+  closeBtn.onclick = () => { if (!goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } else { closed = true; } };   // 执行中=中断
+  mask.addEventListener('click', (e) => { if (e.target === mask && !goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } });
 }
 
 // 持有卡片统计：总持有 / 可交易 / 锁定中 / 稀有度分布（含机制卡）
@@ -3460,12 +3619,13 @@ function buildOverviewSection(sum) {
   append(core,
     mdKpiCoreTile(t('marketData.kpiVolume'), fmtK(sum.totalVolume), false),
     mdKpiCoreTile(t('marketData.kpiTrades'), String(sum.totalTrades), false),
-    mdKpiCoreTile(t('marketData.kpiMedian'), fmtPrice(sum.medianPrice), true)); // 中位价 accent
+    mdKpiCoreTile(t('marketData.kpiPlayers'), String((sum.overlap && sum.overlap.total) || 0), true)); // 独立玩家 accent（= 买家∪卖家去重，overlap.total）
   sec.appendChild(core);
   // 辅助 KPI + 市场结构 合并同一行（flex wrap 药丸混排）
   const aux = el('div', { cls: 'md-kpi-aux' });
   append(aux,
     mdPill(t('marketData.kpiAvg') + ' ' + fmtPrice(sum.avgPrice)),
+    mdPill(t('marketData.kpiMedian') + ' ' + fmtPrice(sum.medianPrice)),
     mdPill(t('marketData.kpiBuyers') + ' ' + sum.uniqueBuyers),
     mdPill(t('marketData.kpiSellers') + ' ' + sum.uniqueSellers),
     mdPill(t('marketData.kpiCards') + ' ' + sum.uniqueCards));
