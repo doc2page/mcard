@@ -1883,7 +1883,8 @@ function openGambleModal() {
   let mode = 'one';
   const modesRow = el('div', { cls: 'gm-modes' });
   const nInput = el('input', { cls: 'modal-input gm-n', attrs: { type: 'number', min: '1', step: '1', inputmode: 'numeric' } });
-  nInput.value = '10';
+  nInput.value = '2';
+  nInput.max = String(pool.length);
   const nWrap = el('div', { cls: 'gm-n-wrap' });
   nWrap.style.display = 'none';
   nWrap.appendChild(el('span', { cls: 'gm-n-lbl', text: t('inv.gambleNLabel') }));
@@ -1905,7 +1906,7 @@ function openGambleModal() {
   append(modesRow,
     mkMode('one', t('inv.gambleModeOne'), ''),
     mkMode('n', t('inv.gambleModeN'), ''),
-    mkMode('all', t('inv.gambleModeAll'), t('inv.gambleModeAllSub', { n: pool.length })));
+    mkMode('all', t('inv.gambleModeAll'), ''));
   body.appendChild(modesRow);
   body.appendChild(nWrap);
   box.appendChild(body);
@@ -1918,10 +1919,9 @@ function openGambleModal() {
   body.appendChild(logBox);
   body.appendChild(resultBox);
 
-  const goBtn = el('button', { cls: 'btn gm-go', attrs: { type: 'button' }, text: '🎲 ' + t('inv.gambleGo') });
-  const closeBtn = el('button', { cls: 'btn ghost', attrs: { type: 'button' }, text: t('common.cancel') });
+  const goBtn = el('button', { cls: 'btn gm-go', attrs: { type: 'button' }, text: t('inv.gambleGo') });
   const actions = el('div', { cls: 'modal-actions' });
-  append(actions, closeBtn, goBtn);
+  actions.appendChild(goBtn);
   box.appendChild(actions);
   mask.appendChild(box);
   document.body.appendChild(mask);
@@ -1947,7 +1947,6 @@ function openGambleModal() {
     }
     const chosen = ordered.slice(0, n);
     goBtn.dataset.busy = '1'; goBtn.disabled = true;
-    closeBtn.textContent = t('inv.gambleStop');
     modesRow.querySelectorAll('.gm-mode, .gm-n, input').forEach((x) => { x.disabled = true; });
     nInput.disabled = true;
     logBox.style.display = '';
@@ -1959,19 +1958,29 @@ function openGambleModal() {
       const row = el('div', { cls: 'gm-row' });
       row.appendChild(el('span', { cls: 'gm-idx mono', text: '#' + (i + 1) }));
       row.appendChild(el('span', { cls: 'gm-dots', text: '···' }));
+      const gainEl = el('span', { cls: 'gm-gain mono rolling' });
+      row.appendChild(gainEl);
       logBox.appendChild(row);
       logBox.scrollTop = logBox.scrollHeight;
+      // 数字滚动：请求 pending 期间假数字跳变（老虎机感），返回定格真值
+      const rollTimer = setInterval(function () {
+        gainEl.textContent = '+' + fmtNum(3000 + Math.floor(Math.random() * 177000));
+      }, 55);
       let r;
       try { r = await send({ type: 'USE_MECH', cardId: chosen[i].cardId }); }
       catch (e) { r = null; }
+      clearInterval(rollTimer);
       if (closed) break;
       if (r && r.ok) {
         opened++; gains.push(r.manaGained || 0);
-        row.appendChild(el('span', { cls: 'gm-gain mono', text: '+' + fmtNum(r.manaGained || 0) }));
+        gainEl.textContent = '+' + fmtNum(r.manaGained || 0);
       } else {
         failedN++;
-        row.appendChild(el('span', { cls: 'gm-fail', text: '✕' }));
+        gainEl.textContent = '✕';
+        gainEl.classList.add('gm-fail');
       }
+      gainEl.classList.remove('rolling');
+      gainEl.classList.add('settle');
       goBtn.textContent = (i + 1) + '/' + chosen.length;
     }
     // 结算
@@ -1997,14 +2006,15 @@ function openGambleModal() {
       else { key = 'inv.gambleEven'; cls = 'gm-verdict'; }
       resultBox.appendChild(el('div', { cls: cls, text: t(key, { pct: Math.abs(pct) }) }));
     }
-    goBtn.textContent = '✓'; goBtn.disabled = false; goBtn.dataset.busy = ''; goBtn.style.display = 'none';
-    closeBtn.textContent = t('common.close');
+    goBtn.textContent = t('common.close'); goBtn.disabled = false; goBtn.dataset.busy = '';
+    goBtn.onclick = () => close();   // 结算后 go 按钮转关闭
   };
 
-  const onKey = (e) => { if (e.key === 'Escape' && !goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } };
+  // Esc / 遮罩点击：选择期=关窗，执行中=中断（已开保留，进结算），结算后=关窗
+  const requestClose = () => { if (goBtn.dataset.busy) { closed = true; } else close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { requestClose(); document.removeEventListener('keydown', onKey); } };
   document.addEventListener('keydown', onKey);
-  closeBtn.onclick = () => { if (!goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } else { closed = true; } };   // 执行中=中断
-  mask.addEventListener('click', (e) => { if (e.target === mask && !goBtn.dataset.busy) { close(); document.removeEventListener('keydown', onKey); } });
+  mask.addEventListener('click', (e) => { if (e.target === mask) { requestClose(); document.removeEventListener('keydown', onKey); } });
 }
 
 // 持有卡片统计：总持有 / 可交易 / 锁定中 / 稀有度分布（含机制卡）

@@ -2387,7 +2387,9 @@ body.no-token .layout > main { display: none !important; }
 .gm-log {
   margin-top: 12px; max-height: 170px; overflow-y: auto; border: 1px solid var(--border);
   border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  scrollbar-width: none; -ms-overflow-style: none;   /* 隐藏滚动条（仍可滚动/自动跟随） */
 }
+.gm-log::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .gm-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
 .gm-idx { color: var(--muted); flex: none; width: 40px; }
 .gm-dots { flex: 1; color: var(--faint); letter-spacing: 2px; overflow: hidden; }
@@ -2405,3 +2407,11 @@ body.no-token .layout > main { display: none !important; }
   box-shadow: 0 4px 14px -4px rgba(232, 64, 45, 0.55);
 }
 .btn.gm-go:disabled { opacity: 0.65; }
+.gm-modal .modal-actions { justify-content: center; }   /* 单 go 按钮（已去 cancel）水平居中 */
+.gm-gain.rolling { color: var(--muted); }
+.gm-gain.settle { animation: gm-settle 0.55s ease-out; }
+@keyframes gm-settle {
+  0% { color: var(--accent); text-shadow: 0 0 14px var(--accent-glow); transform: scale(1.25); }
+  100% { text-shadow: none; transform: scale(1); }
+}
+.gm-modal .modal-actions { margin-top: 18px; }
