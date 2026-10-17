@@ -2456,3 +2456,8 @@ body.no-token .layout > main { display: none !important; }
 @keyframes gm-shine { to { background-position: -200% 0; } }
 .trade-card { content-visibility: auto; contain-intrinsic-size: 232px 420px; }   /* 屏外卡跳过渲染（3027 张 view 的滚动/首显提速；intrinsic 近似防滚动跳变 */
 .inventory-card { content-visibility: auto; contain-intrinsic-size: 232px 470px; }   /* 屏外卡跳过渲染（同 trade-card）*/
+/* 移动端禁用 content-visibility：移动浏览器对动态 append 场景的实现有 bug（layout 抖动/软锁，
+   实测点进交易记录卡死）；分片渲染已足够，桌面保留此优化 */
+@media (max-width: 768px) {
+  .trade-card, .inventory-card { content-visibility: visible; contain-intrinsic-size: normal; }
+}

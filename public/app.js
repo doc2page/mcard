@@ -1294,10 +1294,11 @@ function renderTrades() {
   // 每帧 24 张 + DocumentFragment + 渲染令牌防过期批次；首批立显、后续帧补齐
   const token = ++_trRenderToken;
   const frag = document.createDocumentFragment();
+  const _chunk = window.matchMedia('(max-width: 768px)').matches ? 12 : 24;   // 移动端弱设备减半
   let _i = 0;
   const _step = function () {
     if (token !== _trRenderToken) return;   // 已被新一轮渲染取代，丢弃
-    const end = Math.min(_i + 24, list.length);
+    const end = Math.min(_i + _chunk, list.length);
     for (; _i < end; _i++) frag.appendChild(buildTradeCard(list[_i], Math.min(_i, 40) * 25));
     grid.appendChild(frag);
     if (_i < list.length) requestAnimationFrame(_step);
@@ -1862,10 +1863,11 @@ function renderInventory() {
   // rAF 分片渲染（同交易记录）：持有卡 DOM 更重（询价/卖出按钮、锁遮罩），600+ 张同步构建已过百 ms
   const token = ++_invRenderToken;
   const frag = document.createDocumentFragment();
+  const _chunk = window.matchMedia('(max-width: 768px)').matches ? 12 : 24;   // 移动端弱设备减半
   let _i = 0;
   const _step = function () {
     if (token !== _invRenderToken) return;   // 已被新一轮渲染取代，丢弃
-    const end = Math.min(_i + 24, list.length);
+    const end = Math.min(_i + _chunk, list.length);
     for (; _i < end; _i++) frag.appendChild(buildInventoryCard(list[_i], Math.min(_i, 40) * 25));
     grid.appendChild(frag);
     if (_i < list.length) requestAnimationFrame(_step);
