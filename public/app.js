@@ -1252,6 +1252,7 @@ function resolvedTrades() {
 }
 
 // 购买记录视图：渲染历史成交卡（复用 card 外观，价格行换成卖家+时间）
+let _trRenderToken = 0;   // 交易记录分片渲染令牌：分片期间重入 renderTrades 时旧批次作废（卡册模式）
 function renderTrades() {
   buildTradesChips();
   renderTradeStats();
@@ -1289,7 +1290,19 @@ function renderTrades() {
     grid.appendChild(empty);
     return;
   }
-  list.forEach((it, i) => grid.appendChild(buildTradeCard(it, Math.min(i, 40) * 25)));
+  // rAF 分片渲染（卡册模式）：3027 张全量同步构建阻塞主线程几百 ms（点交易记录按钮延迟的根因）；
+  // 每帧 24 张 + DocumentFragment + 渲染令牌防过期批次；首批立显、后续帧补齐
+  const token = ++_trRenderToken;
+  const frag = document.createDocumentFragment();
+  let _i = 0;
+  const _step = function () {
+    if (token !== _trRenderToken) return;   // 已被新一轮渲染取代，丢弃
+    const end = Math.min(_i + 24, list.length);
+    for (; _i < end; _i++) frag.appendChild(buildTradeCard(list[_i], Math.min(_i, 40) * 25));
+    grid.appendChild(frag);
+    if (_i < list.length) requestAnimationFrame(_step);
+  };
+  _step();
 }
 
 // 挂单汇总：存活/在挂魔值/历史总数/成交/取消/重挂（从 ordersAll 实时统计）
@@ -1806,6 +1819,7 @@ function showOrderHistory(cardId, head) {
 }
 
 // ============ 持有卡片视图 ============
+let _invRenderToken = 0;   // 持有分片渲染令牌：分片期间重入 renderInventory 时旧批次作废（同交易记录）
 function renderInventory() {
   buildInventoryChips();
   renderInventoryStats();
@@ -1845,8 +1859,19 @@ function renderInventory() {
     grid.appendChild(empty);
     return;
   }
-  list.forEach((it, i) => grid.appendChild(buildInventoryCard(it, Math.min(i, 40) * 25)));
-  updateRedeemLockVisual();   // 兑换模式：选满 10 后未选中卡灰显（进入模式/自动选/清选后重绘时机统一在此刷新）
+  // rAF 分片渲染（同交易记录）：持有卡 DOM 更重（询价/卖出按钮、锁遮罩），600+ 张同步构建已过百 ms
+  const token = ++_invRenderToken;
+  const frag = document.createDocumentFragment();
+  let _i = 0;
+  const _step = function () {
+    if (token !== _invRenderToken) return;   // 已被新一轮渲染取代，丢弃
+    const end = Math.min(_i + 24, list.length);
+    for (; _i < end; _i++) frag.appendChild(buildInventoryCard(list[_i], Math.min(_i, 40) * 25));
+    grid.appendChild(frag);
+    if (_i < list.length) requestAnimationFrame(_step);
+    else updateRedeemLockVisual();   // 兑换模式：选满 10 后未选中卡灰显——需全部卡在位后统一刷（分片中未渲染卡查不到）
+  };
+  _step();
 }
 
 // ============ 搏一把：批量开魔力符券（随机 1 / 随机 N / 全部；冷却中的卡优先开）============
@@ -1911,8 +1936,14 @@ function openGambleModal() {
   body.appendChild(nWrap);
   box.appendChild(body);
 
-  // 执行 + 日志 + 结算
-  const logBox = el('div', { cls: 'gm-log' });
+  // 中央开卡舞台（大数字滚动→定格）+ 日志 + 结算
+  const stage = el('div', { cls: 'gm-stage' });
+  stage.style.display = 'none';
+  const stageIdx = el('div', { cls: 'gm-stage-idx' });
+  const stageNum = el('div', { cls: 'gm-stage-num mono' });
+  append(stage, stageIdx, stageNum);
+  body.appendChild(stage);
+  const logBox = el('div', { cls: 'gm-pills' });
   logBox.style.display = 'none';
   const resultBox = el('div', { cls: 'gm-result' });
   resultBox.style.display = 'none';
@@ -1949,40 +1980,47 @@ function openGambleModal() {
     goBtn.dataset.busy = '1'; goBtn.disabled = true;
     modesRow.querySelectorAll('.gm-mode, .gm-n, input').forEach((x) => { x.disabled = true; });
     nInput.disabled = true;
+    modesRow.style.display = 'none';
+    nWrap.style.display = 'none';
+    stage.style.display = '';
     logBox.style.display = '';
     logBox.replaceChildren();
     for (let i = 0; i < chosen.length; i++) {
       if (closed) break;   // 中断：已开的保留
       goBtn.textContent = (i) + '/' + chosen.length + ' …';
       if (i > 0) await new Promise((r) => setTimeout(r, 400 + Math.floor(Math.random() * 500)));   // randSleep 400-900ms（反风控，同采集链路节奏；首张不等）
-      const row = el('div', { cls: 'gm-row' });
-      row.appendChild(el('span', { cls: 'gm-idx mono', text: '#' + (i + 1) }));
-      row.appendChild(el('span', { cls: 'gm-dots', text: '···' }));
-      const gainEl = el('span', { cls: 'gm-gain mono rolling' });
-      row.appendChild(gainEl);
-      logBox.appendChild(row);
-      logBox.scrollTop = logBox.scrollHeight;
-      // 数字滚动：请求 pending 期间假数字跳变（老虎机感），返回定格真值
+      // 中央大字滚动：请求 pending 期间假数字跳变（灰暗+微糊），返回定格真值（分档彩色）
+      stageIdx.textContent = t('inv.gambleStageIdx', { i: i + 1, n: chosen.length });
+      stage.className = 'gm-stage';   // 滚动期熄灭光底
+      stageNum.className = 'gm-stage-num rolling';
+      stageNum.textContent = fmtNum(3000 + Math.floor(Math.random() * 177000));
       const rollTimer = setInterval(function () {
-        gainEl.textContent = '+' + fmtNum(3000 + Math.floor(Math.random() * 177000));
+        stageNum.textContent = fmtNum(3000 + Math.floor(Math.random() * 177000));
       }, 55);
       let r;
       try { r = await send({ type: 'USE_MECH', cardId: chosen[i].cardId }); }
       catch (e) { r = null; }
       clearInterval(rollTimer);
       if (closed) break;
+      let v = 0;
+      const tier = (r && r.ok) ? (r.manaGained >= 100000 ? 'tier-high' : (r.manaGained >= 50000 ? 'tier-mid' : '')) : 'tier-fail';
       if (r && r.ok) {
-        opened++; gains.push(r.manaGained || 0);
-        gainEl.textContent = '+' + fmtNum(r.manaGained || 0);
+        opened++; v = r.manaGained || 0; gains.push(v);
+        stageNum.textContent = fmtNum(v);
+        stageNum.className = 'gm-stage-num settle ' + (tier || 'tier-low');
       } else {
         failedN++;
-        gainEl.textContent = '✕';
-        gainEl.classList.add('gm-fail');
+        stageNum.textContent = '✕';
+        stageNum.className = 'gm-stage-num settle tier-fail';
       }
-      gainEl.classList.remove('rolling');
-      gainEl.classList.add('settle');
+      stage.classList.add('lit');   // 定格点亮光底
+      const pill = el('span', { cls: 'gm-pill pop ' + tier, text: (r && r.ok ? fmtNum(v) : '✕') });
+      logBox.appendChild(pill);
+      logBox.scrollTop = logBox.scrollHeight;
       goBtn.textContent = (i + 1) + '/' + chosen.length;
+      await new Promise((rr) => setTimeout(rr, 700));   // 定格停一拍再开下一张
     }
+    stage.style.display = 'none';
     // 结算
     const total = gains.reduce((a, b) => a + b, 0);
     const best = gains.length ? Math.max.apply(null, gains) : 0;
@@ -1990,7 +2028,7 @@ function openGambleModal() {
     const hist = (state.cardLogSummary && Number(state.cardLogSummary.avg)) || 0;
     resultBox.style.display = '';
     resultBox.replaceChildren();
-    const big = el('div', { cls: 'gm-total mono', text: '+' + fmtNum(total) });
+    const big = el('div', { cls: 'gm-total', text: fmtNum(total) });
     resultBox.appendChild(big);
     const meta = el('div', { cls: 'gm-meta' });
     append(meta,
