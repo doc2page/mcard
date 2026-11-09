@@ -6212,6 +6212,23 @@ function renderTokenPanel() {
   }
 }
 
+// API 代理输入：读 config.proxy 填值；失焦/回车保存（空=直连）；格式校验 http(s)://host:port
+function initProxyField() {
+  var field = $('proxyField');
+  if (!field) return;
+  field.value = (state && state.config && state.config.proxy) || '';
+  var save = async function () {
+    var v = (field.value || '').trim();
+    if (v && !/^https?:\/\/[^\s]+/.test(v)) { showToast(t('site.proxyInvalid'), 'error'); return; }
+    var cur = (state && state.config && state.config.proxy) || '';
+    if (v === cur) return;   // 未变化不落盘
+    var r = await send({ type: 'SET_CONFIG', config: { proxy: v } });
+    if (r && r.ok) showToast(v ? t('site.proxySaved', { p: v }) : t('site.proxyCleared'), 'success');
+  };
+  field.addEventListener('blur', save);
+  field.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); field.blur(); } });
+}
+
 function initTokenPanel() {
   var panel = $('tokenPanel');
   var toggle = $('tokenToggle');
@@ -6404,6 +6421,7 @@ function applyLabUrl() {
   initBudget();
   initBatch();
   initTokenPanel();
+  initProxyField();
   if (!hasApiKey(state)) document.body.classList.add('no-token');
   initTokenModal();
   // 加载时刷新市场：有定向 tag → runSearch；否则 → triggerRefreshRound（统一入口：节流+按钮 spin 同步）

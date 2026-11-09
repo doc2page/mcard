@@ -66,6 +66,11 @@ registerMessages('en', {
   'site.label': 'Site',
   'site.pickPrompt': 'Pick the m-team site you normally use',
   'site.currentApi': 'Current API: {base}',
+  'site.proxyLabel': 'API proxy',
+  'site.proxyPh': 'http://host:port · empty = direct',
+  'site.proxySaved': 'API proxy active: {p}',
+  'site.proxyCleared': 'Direct connection restored',
+  'site.proxyInvalid': 'Expected format: http://host:port',
   'nav.needToken': 'Set API token first',
 
   // ============ 配置 (cfg.*) ============

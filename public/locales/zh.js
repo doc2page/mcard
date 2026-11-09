@@ -71,6 +71,11 @@ registerMessages('zh', {
   'site.label': '网址入口',
   'site.pickPrompt': '请选择你平时访问 m-team 的网址',
   'site.currentApi': '当前 API：{base}',
+  'site.proxyLabel': 'API 代理',
+  'site.proxyPh': 'http://host:port · 留空直连',
+  'site.proxySaved': 'API 代理已生效：{p}',
+  'site.proxyCleared': '已恢复直连（无代理）',
+  'site.proxyInvalid': '格式应为 http://host:port',
   'nav.needToken': '请先设置 API 令牌',
 
   // ============ 配置 (cfg.*) ============

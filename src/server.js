@@ -68,6 +68,7 @@ export function createServer({ dbPath = 'data/mcard.db', port } = {}) {
     getApiKey: async () => state.getState().config.apiKey,
     getApiBase: async () => state.getState().config.apiBase,
     setApiBase: async (b) => state.update({ config: { apiBase: b } }),
+    getProxy: async () => state.getState().config.proxy,   // API 代理（面板可配，空=直连；所有 M-TEAM 请求走它）
   });
   const collector = createCollector({ state, mteam, normalizers, stats });
   const trader = createTrader({ state, mteam, collector });
