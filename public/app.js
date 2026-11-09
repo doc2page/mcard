@@ -254,6 +254,12 @@ function renderAll() {
 // ---------- 侧栏版本行：当前版本 + 最新版本（GitHub releases 实时读，失败直说不强求） ----------
 var _latestVersion = null;   // null=未查/查询中；false=失败；string=最新 tag（v 前缀已去）
 var _curVersion = '';        // 当前运行版本缓存（切语言重渲染用——renderStatus 无异步拿不到）
+function _verNewer(a, b) {   // 语义版本比较 a>b（'1.8.0' vs '1.7.3'→true；字符串不等会把「本地更新」误报成有新版）
+  const pa = String(a).replace(/^v/, '').split('.').map(Number);
+  const pb = String(b).replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0); }
+  return false;
+}
 function renderVersionBox() {
   const box = $('versionBox');
   if (!box) return;
@@ -265,9 +271,9 @@ function renderVersionBox() {
   else if (_latestVersion === false) lt = t('panel.versionFail');
   else {
     lt = _latestVersion;
-    if (cur && _latestVersion !== cur) lt += ' · ' + t('panel.versionNewer');   // 有新版高亮提示
+    if (cur && _verNewer(_latestVersion, cur)) lt += ' · ' + t('panel.versionNewer');   // 仅远端>本地才提示（预发布本地版不误报）
   }
-  const l2 = el('div', { cls: (typeof _latestVersion === 'string' && cur && _latestVersion !== cur) ? 'vb-newer' : '', text: t('panel.latestVersion') + ' ' + lt });
+  const l2 = el('div', { cls: (typeof _latestVersion === 'string' && cur && _verNewer(_latestVersion, cur)) ? 'vb-newer' : '', text: t('panel.latestVersion') + ' ' + lt });
   // 最新版本行：点击新 tab 打开 GitHub releases（查到/失败均可点——失败时让用户自己去看也合理）
   l2.title = 'GitHub Releases';
   l2.style.cursor = 'pointer';
