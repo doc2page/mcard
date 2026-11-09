@@ -25,6 +25,7 @@
 - 🔔 **变化角标** —— 打开页面轻量探测各数据变动，侧栏红字角标提醒（进入页面即清）
 - 📱 **移动端自适应** —— 抽屉式导航、统计卡片可折叠，手机 / 平板 / 桌面通用
 - 🔑 **API Key 经页面设置** —— 存储在后端 SQLite，不落浏览器
+- 🛰️ **API 代理可选** —— 直连不通的环境可在「API 令牌」面板填 `http://host:port` 代理，全部 M-TEAM 请求走它；留空即直连
 - 🔐 **可选访问鉴权** —— HMAC token 登录保护（cookie 30 天）
 
 ## 效果展示
@@ -62,7 +63,7 @@
 
 ```bash
 docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
-  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.7.3
+  -e AUTH_PASSWORD=changeme --restart unless-stopped doc2page/mcard:1.8.0
 ```
 
 或 `docker-compose.yml`：
@@ -70,7 +71,7 @@ docker run -d --name mcard -p 31414:31414 -v mcard-data:/app/data \
 ```yaml
 services:
   mcard:
-    image: doc2page/mcard:1.7.3
+    image: doc2page/mcard:1.8.0
     container_name: mcard
     ports: ["31414:31414"]
     volumes: ["./data:/app/data"]
@@ -102,6 +103,7 @@ docker compose up -d --build
 | 重启策略 | `unless-stopped` | 崩溃自动重启，手动停止则不重启 |
 | 访问密码 | `AUTH_PASSWORD=""` | 留空=不鉴权；填密码则访问需登录（见下方「访问鉴权」）|
 | 时区 | `Asia/Shanghai` | 掉落统计日界按此时区（M-TEAM 数据为北京时间）。改时区在 `.env` 设 `TZ=`，如 `TZ=UTC` |
+| API 代理 | 页面配置 | 「API 令牌」面板填写（`http://host:port`），即时生效，无需改 compose 重启 |
 
 数据持久化在 `./data/mcard.db`，删容器、重建镜像都不会丢失 API Key 和已采集数据。
 
@@ -143,7 +145,7 @@ docker compose down && cp -r data "backup-$(date +%F)" && docker compose up -d
 ```bash
 # 升级（先备份！见上节）
 docker compose down
-docker pull doc2page/mcard:latest        # 或指定版本如 :1.7.3
+docker pull doc2page/mcard:latest        # 或指定版本如 :1.8.0
 docker compose up -d
 
 # 回滚：把 docker-compose.yml 里 image 改回旧版本 tag，再 up -d
