@@ -25,6 +25,7 @@ A Chrome extension rebuilt as a Dockerized web service for single-user self-host
 - 🔔 **Change badges** — lightweight probe on page load, red badges on the sidebar show what changed
 - 📱 **Mobile-first** — drawer navigation, collapsible stat cards, responsive across phone / tablet / desktop
 - 🔑 **API key set via the UI** — stored in backend SQLite, never in the browser
+- 🛰️ **Optional API proxy** — fill `http://host:port` in the API-token panel when direct access is blocked; all M-TEAM requests then go through it. Leave empty for direct connection
 - 🔐 **Optional access auth** — HMAC token login protection (30-day cookie)
 
 ## Screenshots
@@ -102,6 +103,7 @@ Everything lives in `docker-compose.yml`:
 | Restart | `unless-stopped` | auto-restart on crash; won't restart after manual stop |
 | Access password | `AUTH_PASSWORD=""` | empty = no auth; set a password to require login (see "Access auth" below) |
 | Timezone | `Asia/Shanghai` | drop-stats day boundary follows this TZ (M-TEAM data is Beijing time). Override via `.env` `TZ=`, e.g. `TZ=UTC` |
+| API proxy | via web UI | fill in the API-token panel (`http://host:port`); takes effect immediately — no compose change or restart needed |
 
 Data persists in `./data/mcard.db` — removing the container or rebuilding the image won't lose your API key or cached data.
 
